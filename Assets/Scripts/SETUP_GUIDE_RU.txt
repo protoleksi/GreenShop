@@ -1,0 +1,874 @@
+================================================================================
+GREENSHOP — ПОДРОБНАЯ ИНСТРУКЦИЯ ПО ПОДКЛЮЧЕНИЮ СКРИПТОВ
+================================================================================
+
+Версия: Unity 6.6 (6000.6.3f1), URP 2D, Input System Package
+Все скрипты находятся в: Assets/Scripts
+Пространство имён: GreenShop
+
+СОДЕРЖАНИЕ
+  0.  Подготовка проекта
+  1.  Ядро игры (GameRoot)
+  2.  EventSystem и камера
+  3.  Кликабельный объект
+  4.  Всплывающий текст (+1)
+  5.  HUD: монеты, доход, таймер
+  6.  Навигация, вариант А: 3 зоны в одной сцене (pan)
+  7.  Навигация, вариант Б: 3 сцены с затемнением (fade)
+  8.  Растения (ScriptableObject)
+  9.  Сохранения (JSON + PlayerPrefs)
+  10. Полный порядок сборки сцены
+  11. Проверка работы
+  12. Частые проблемы и решения
+  13. Краткий справочник по API
+  14. Рекомендуемая структура проекта
+
+
+================================================================================
+0. ПОДГОТОВКА ПРОЕКТА
+================================================================================
+
+0.1. Открой проект C:\Users\<пользователь>\GreenShop в Unity Hub.
+     Дождись окончания импорта и компиляции скриптов.
+     В консоли (Window > General > Console) не должно быть красных ошибок.
+
+0.2. Открой сцену: Assets/Scenes/MainGame.unity.
+
+0.3. Проверь настройки ввода:
+     Edit > Project Settings > Player > Other Settings > Active Input Handling.
+     Должно быть "Input System Package (New)" или "Both".
+     При значении "Input System Package (New)" EventSystem должен использовать
+     InputSystemUIInputModule, а не StandaloneInputModule.
+
+0.4. Если Unity при создании первого TMP-текста предложит импортировать
+     TMP Essentials — нажми "Import TMP Essentials". Без этого текст может
+     отображаться розовым или не отображаться вообще.
+
+0.5. Все новые скрипты уже в проекте. Если в меню Tools > GreenShop пунктов нет,
+     подожди компиляцию или нажми Ctrl+R (Asset > Refresh).
+
+
+================================================================================
+1. ЯДРО ИГРЫ (GameRoot)
+================================================================================
+
+1.1. Создай пустой объект:
+     Hierarchy > правый клик > Create Empty.
+     Переименуй в "GameRoot".
+     Transform: Position (0, 0, 0), Rotation (0, 0, 0), Scale (1, 1, 1).
+
+1.2. На объект GameRoot добавь три компонента:
+     Add Component > GameManager
+     Add Component > IncomeTicker
+     Add Component > SaveManager
+
+1.3. Настрой GameManager:
+     - Starting Coins = 0
+       Стартовые монеты при отсутствии сохранения.
+     - Starting Income Per Second = 1
+       Демонстрационный доход. Поставь 0, если доход должен появляться
+       только от растений/улучшений.
+     - Load Save On Start = ON
+       Автоматически загружать save.json при запуске.
+     - Persist Between Scenes = ON
+       GameRoot переживёт смену сцен (DontDestroyOnLoad).
+
+1.4. Настрой IncomeTicker:
+     - Interval Seconds = 1
+       Период выплаты дохода (в секундах).
+     - Use Unscaled Time = OFF
+       ON — доход идёт даже при Time.timeScale = 0 (например, в паузе).
+     - Auto Pay = ON
+       Автоматически начислять доход. Если OFF, доход можно выплачивать
+       вручную через TickNow().
+
+1.5. Настрой SaveManager:
+     - Auto Save Interval Seconds = 30
+       Автосохранение раз в 30 секунд.
+     - Save On Application Pause = ON
+       Сохранять при сворачивании приложения (важно для мобилок).
+     - Log Saves = OFF
+       ON — писать в Console путь сохранения при каждой записи.
+
+1.6. ВАЖНО:
+     GameRoot должен быть только в первой сцене. Благодаря DontDestroyOnLoad
+     он переедет в следующие сцены сам. Если случайно добавить GameRoot
+     в каждую сцену, дубликаты автоматически уничтожатся, но лучше держать
+     один экземпляр.
+
+     Не добавляй на GameRoot визуальные объекты и HUD: при уничтожении
+     дубликата уничтожится весь GameObject.
+
+
+================================================================================
+2. EVENTSYSTEM И КАМЕРА
+================================================================================
+
+2.1. Создай EventSystem:
+     Hierarchy > правый клик > UI > Event System.
+     Если его нет, клики по объектам и UI-кнопки работать не будут.
+
+     В инспекторе EventSystem должен быть компонент:
+     - InputSystemUIInputModule (при новом Input System)
+       или StandaloneInputModule (если используется старый Input Manager).
+
+2.2. Настрой Main Camera:
+     - Tag = MainCamera (обязательно, скрипты используют Camera.main).
+     - Projection = Orthographic (для 2D).
+     - Add Component > Physics 2DRaycaster.
+       Без него клики по Collider2D не доходят до Clickable.
+
+2.3. Если в сцене несколько камер, Camera.main должна быть ровно одна.
+     У точек зон (см. раздел 6) тег должен быть Untagged, а компонент Camera
+     удалён.
+
+2.4. EventSystem не переживает смену сцен. Если используешь 3 сцены
+     (раздел 7), добавь EventSystem в каждую сцену или сделай отдельный
+     префаб EventSystem и вставляй его во все сцены.
+
+
+================================================================================
+3. КЛИКАБЕЛЬНЫЙ ОБЪЕКТ
+================================================================================
+
+3.1. Создай объект, по которому будет клик:
+     - 2D Object > Sprites > Square (для теста), либо свой спрайт растения.
+     - Переименуй, например, в "ClickTarget".
+     - Position можно оставить (0, 0, 0).
+
+3.2. Добавь Collider2D:
+     Add Component > Box Collider2D.
+     Нажми Edit Collider и подгони рамку под спрайт.
+     Collider должен быть НЕ триггером (Is Trigger = OFF), иначе Physics2D
+     raycast может его пропустить (зависит от Project Settings > Physics 2D >
+     Queries Hit Triggers).
+
+3.3. Добавь компонент Clickable:
+     Add Component > Clickable.
+
+3.4. Настрой Clickable:
+     - Coins Per Click = 1
+       Сколько монет даёт один клик.
+     - Show Popup = ON
+       Показывать всплывающий "+1".
+     - Popup Anchor = (необязательно)
+       Transform, от которого считается позиция текста. Если пусто —
+       используется позиция самого объекта.
+       Можно создать дочерний пустой объект "PopupAnchor" и поднять его
+       над растением.
+     - Popup World Offset = (0, 0.5, 0)
+       Смещение текста в мировых координатах.
+     - Popup Color = жёлтый (или свой).
+     - Punch Scale = 0.08
+       Амплитуда анимации сжатия/разжатия. 0 — отключить.
+     - Punch Duration = 0.12
+       Длительность анимации в секундах.
+     - Audio Source / Click Clip = (необязательно)
+       Звук клика. Audio Source можно добавить на этот же объект.
+
+3.5. Проверка клика:
+     - В сцене есть EventSystem.
+     - На Main Camera есть Physics2DRaycaster.
+     - У объекта есть Collider2D.
+     - Объект не перекрыт UI-элементом с Raycast Target = ON.
+     - Слой объекта входит в Event Mask у Physics2DRaycaster (по умолчанию
+       Everything).
+
+3.6. Использование Clickable на UI-кнопке:
+     Скрипт можно повесить на объект с Button и вызывать публичный метод
+     Clickable.Click() из Button.onClick. Collider2D в этом случае не нужен.
+     Но не добавляй Clickable на ту же кнопку, если она уже обрабатывает
+     клик через IPointerClickHandler — клик засчитается дважды.
+
+
+================================================================================
+4. ВСПЛЫВАЮЩИЙ ТЕКСТ (+1)
+================================================================================
+
+4.1. Создай Canvas:
+     Hierarchy > правый клик > UI > Canvas.
+     Переименуй в "GameCanvas".
+     Canvas:
+     - Render Mode = Screen Space - Overlay.
+     Canvas Scaler:
+     - UI Scale Mode = Scale With Screen Size.
+     - Reference Resolution = 1920 x 1080.
+     - Screen Match Mode = Match Width Or Height, Match = 0.5.
+
+4.2. Добавь на GameCanvas компонент FloatingTextSpawner.
+     Спавнер должен находиться на Canvas или на его дочернем объекте.
+
+4.3. Создай префаб всплывающего текста:
+     a) На GameCanvas: правый клик > UI > Text - TextMeshPro.
+        Переименуй в "FloatingText".
+     b) В TMP-компоненте:
+        - Text = "+1"
+        - Font Size = 48 (или больше)
+        - Alignment = Center / Middle
+        - Color = жёлтый
+        - Raycast Target = OFF
+     c) На FloatingText добавь компонент Canvas Group.
+     d) На FloatingText добавь компонент FloatingText (скрипт).
+        - Label = сам TMP-текст (перетащи компонент TextMeshProUGUI).
+        - Canvas Group = компонент Canvas Group (или оставь пусто —
+          скрипт найдёт/добавит автоматически).
+        - Lifetime = 0.9
+        - Rise Distance = 70
+        - Rise Curve = стандартная плавная кривая.
+        - Fade Curve = 1 в начале, 1 до 60%, 0 в конце.
+     e) Перетащи FloatingText из Hierarchy в окно Project в папку
+        Assets/Prefabs (создай её, если нет). Получится префаб.
+     f) Удали экземпляр FloatingText из сцены — он больше не нужен,
+        спавнер будет создавать копии из префаба.
+
+4.4. Настрой FloatingTextSpawner на GameCanvas:
+     - Prefab = перетащи Assets/Prefabs/FloatingText.prefab.
+     - Default Color = жёлтый (используется, если цвет не передан).
+     - Max Alive = 30
+       Максимум одновременных текстов; старые удаляются.
+
+4.5. Как это работает:
+     - Clickable при клике вызывает FloatingTextSpawner.Spawn().
+     - Спавнер переводит мировую позицию в экранную и создаёт текст
+       внутри Canvas.
+     - FloatingText поднимается вверх и исчезает, затем уничтожается.
+
+4.6. Если текста не видно:
+     - Проверь, что префаб назначен.
+     - Проверь Canvas: Render Mode Overlay, Sorting Order не перекрыт
+       другим Canvas.
+     - Проверь, что у TMP-текста есть шрифт (TMP Essentials импортированы).
+     - Проверь Canvas Group Alpha (должен быть 1 на старте анимации).
+
+
+================================================================================
+5. HUD: МОНЕТЫ, ДОХОД, ТАЙМЕР
+================================================================================
+
+5.1. На GameCanvas создай тексты:
+     a) UI > Text - TextMeshPro, имя "CoinsLabel".
+        - Text = "0"
+        - Font Size = 48
+        - Alignment = Left / Middle
+        - Anchor: верхний левый угол (Anchor Presets: Top Left).
+        - Position: примерно (40, -40).
+     b) UI > Text - TextMeshPro, имя "IncomeLabel".
+        - Text = "+0/сек"
+        - Font Size = 28
+        - Anchor: Top Left, Position примерно (40, -100).
+     c) (Необязательно) таймер:
+        UI > Image, имя "IncomeFill".
+        - Anchor: Top Left.
+        - Width = 220, Height = 12.
+        - Image Type = Filled.
+        - Fill Method = Horizontal.
+        - Fill Origin = Left.
+        - Fill Amount = 0.
+        - Color = зелёный.
+        - Raycast Target = OFF.
+
+5.2. Создай объект HUD:
+     На GameCanvas: правый клик > Create Empty, имя "HUD".
+     Добавь компонент CurrencyHud.
+
+5.3. Настрой CurrencyHud:
+     - Coins Label = CoinsLabel (TMP-компонент).
+     - Income Label = IncomeLabel.
+     - Income Fill = IncomeFill (если используешь таймер).
+     - Income Ticker = (можно оставить пусто — найдётся автоматически).
+     - Coins Format = "{0}"
+       Например, "Монеты: {0}" — если нужен текст перед числом.
+     - Income Format = "+{0}/сек"
+
+5.4. Проверка HUD:
+     - При запуске монеты показывают значение из GameManager.
+     - При клике число обновляется через событие CoinsChanged.
+     - Каждую секунду доход прибавляется (если IncomeTicker.Auto Pay = ON).
+     - Полоска IncomeFill заполняется от 0 до 1 за секунду и сбрасывается.
+
+5.5. HUD не переживает смену сцен, если он не находится под GameRoot.
+     При использовании 3 сцен добавь Canvas+HUD в каждую сцену или
+     сделай HUD дочерним объектом GameRoot, чтобы он сохранялся.
+     Если HUD под GameRoot, не дублируй GameRoot в других сценах.
+
+
+================================================================================
+6. НАВИГАЦИЯ, ВАРИАНТ А: 3 ЗОНЫ В ОДНОЙ СЦЕНЕ (PAN)
+================================================================================
+
+Этот вариант не требует нескольких сцен: камера плавно едет между зонами.
+
+6.1. Поставь Main Camera в вид первой зоны (например, ферма):
+     выбери Main Camera, инструментом Move (W) и Rotate (E) настрой
+     положение и поворот камеры. Для 2D поворот обычно (0, 0, 0).
+
+6.2. Создай точку зоны из копии камеры:
+     - Выбери Main Camera.
+     - Ctrl+D (Duplicate) — появится копия камеры.
+     - Переименуй копию в "Zone_Farm".
+     - Удали у копии компоненты: Camera, Audio Listener,
+       Universal Additional Camera Data, Physics 2DRaycaster.
+     - Tag = Untagged.
+     - Остаётся только Transform с нужной позицией/поворотом.
+     Это точка, куда приедет камера для зоны "Ферма".
+
+6.3. Повтори для остальных зон:
+     - Поставь Main Camera в вид магазина, Ctrl+D, имя "Zone_Shop",
+       удали лишние компоненты, Tag = Untagged.
+     - Поставь Main Camera в вид сада, Ctrl+D, имя "Zone_Garden",
+       удали лишние компоненты, Tag = Untagged.
+
+6.4. Верни Main Camera в первую зону (не критично: при старте
+     ZoneCameraController сам поставит камеру в Start Zone Index).
+
+6.5. Создай объект контроллера:
+     Create Empty, имя "ZoneController".
+     Add Component > ZoneCameraController.
+
+6.6. Настрой ZoneCameraController:
+     - Target Camera = Main Camera.
+     - Zones: Size = 3.
+         Element 0:
+           Name = "Ферма"
+           View Point = Zone_Farm
+         Element 1:
+           Name = "Магазин"
+           View Point = Zone_Shop
+         Element 2:
+           Name = "Сад"
+           View Point = Zone_Garden
+     - Start Zone Index = 0
+     - Move Duration = 0.8
+     - Ease Curve = стандартная кривая (плавный старт/финиш).
+     - Use Unscaled Time = OFF (ON — если нужна работа в паузе).
+     - Unlock Visited Zone = ON
+       Посещённые зоны добавляются в GameManager.UnlockedZones.
+
+6.7. Кнопки переключения зон:
+     a) На GameCanvas создай UI > Button, имя "Btn_Farm".
+        Дочерний TMP-текст: "Ферма".
+     b) В компоненте Button, список On Click ():
+        - Нажми "+".
+        - Перетащи объект ZoneController в поле Object.
+        - В выпадающем списке выбери ZoneCameraController > GoToZone (int).
+        - В поле аргумента введи 0.
+     c) Аналогично Btn_Shop с аргументом 1, Btn_Garden — 2.
+     d) Альтернатива: вместо GoToZone(int) можно использовать
+        GoToNextZone() / GoToPreviousZone().
+
+6.8. Проверка:
+     - Нажми Play.
+     - Нажми кнопку зоны — камера плавно переезжает.
+     - Повторное нажатие текущей зоны ничего не ломает.
+     - В GameManager.UnlockedZones появляются имена зон.
+
+6.9. Ограничения:
+     - Камера двигается напрямую (transform.position/rotation).
+       Не вешай на Main Camera другие скрипты, которые каждый кадр
+       перезаписывают позицию (Cinemachine, Follow-скрипты), иначе
+       они будут бороться с ZoneCameraController.
+     - Точки зон должны иметь одинаковый Z, иначе камера уедет по глубине.
+
+
+================================================================================
+7. НАВИГАЦИЯ, ВАРИАНТ Б: 3 СЦЕНЫ С ЗАТЕМНЕНИЕМ (FADE)
+================================================================================
+
+7.1. Создай сцены:
+     - File > New Scene > Basic 2D (или URP 2D).
+     - Сохрани как Assets/Scenes/Farm.unity.
+     - Повтори для Shop.unity и Garden.unity.
+     - Основную сцену можно оставить MainGame.unity.
+
+7.2. Добавь сцены в Build Settings:
+     File > Build Settings (Build Profiles).
+     Перетащи сцены в список "Scenes In Build" или нажми "Add Open Scenes".
+     Порядок определяет индексы для LoadScene(int).
+
+7.3. Открой первую сцену (MainGame) и создай отдельный объект:
+     Create Empty, имя "SceneLoader".
+     Add Component > SceneLoader.
+
+7.4. Настрой SceneLoader:
+     - Fade = (можно оставить пусто)
+       Если пусто, скрипт создаст полноэкранный чёрный Canvas сам.
+       Можно назначить свой ScreenFade (CanvasGroup + ScreenFade).
+     - Fade Duration = 0.35
+       Длительность затемнения/появления.
+
+7.5. ВАЖНО:
+     - SceneLoader автоматически становится DontDestroyOnLoad.
+     - Добавляй SceneLoader только в первую сцену. В остальных сценах он
+       не нужен, иначе появится дубликат (он сам себя удалит, но лучше
+       не мусорить).
+     - Если добавляешь свой Fade, он должен быть дочерним объектом
+       SceneLoader или отдельным объектом, который не уничтожается
+       при загрузке сцены. Проще оставить Fade пустым.
+
+7.6. Кнопки перехода:
+     a) На Canvas создай UI > Button "Btn_ToFarm".
+     b) Button > On Click ():
+        - "+".
+        - Перетащи SceneLoader.
+        - Выбери SceneLoader > LoadScene (string).
+        - В текстовое поле введи точное имя сцены: "Farm".
+        (Имя чувствительно к регистру и должно совпадать с именем файла
+        сцены и записью в Build Settings.)
+     c) Аналогично для Shop и Garden.
+     d) Можно использовать LoadScene (int) с индексом из Build Settings.
+     e) ReloadCurrentScene() — перезапуск текущей сцены.
+
+7.7. Что происходит при нажатии:
+     - Fade плавно затемняет экран.
+     - SceneManager.LoadSceneAsync загружает сцену.
+     - Fade плавно открывает новую сцену.
+     - GameRoot и SceneLoader остаются жить между сценами.
+
+7.8. В каждой сцене должны быть:
+     - EventSystem (для UI-кнопок).
+     - Canvas с кнопками навигации и, при необходимости, HUD.
+     - Контент сцены.
+     Не добавляй GameRoot в каждую сцену.
+
+7.9. Если при загрузке ошибка "сцена не добавлена в Build Settings",
+     открой Build Settings и добавь её. Проверь точное имя (Farm, Shop...).
+
+
+================================================================================
+8. РАСТЕНИЯ (SCRIPTABLEOBJECT)
+================================================================================
+
+8.1. Быстрое создание 9 растений:
+     В верхнем меню Unity: Tools > GreenShop > Растения >
+     "Создать 9 растений (заглушки)".
+
+     Скрипт создаст:
+     - Assets/Data/Plants/Plant_01.asset ... Plant_09.asset
+     - Assets/Data/PlantDatabase.asset
+     - Заполнит поля тестовыми значениями и откроет базу в инспекторе.
+
+8.2. Данные из генератора — ЗАГЛУШКИ:
+     Редис, Морковь, Клубника, Огурец, Томат, Подсолнух, Тыква,
+     Яблоня, Лаванда.
+     Значения Grow Time, Price, Role, Season нужно заменить реальными
+     данными из таблицы ГД.
+
+8.3. Редактирование растения:
+     Выбери Assets/Data/Plants/Plant_01.asset и заполни:
+     - Plant Name = название растения (русское, для UI).
+     - Grow Time = время роста в СЕКУНДАХ.
+     - Price = цена из таблицы ГД.
+     - Role = Культура / Цветок / Дерево / Особое.
+     - Season = Весна / Лето / Осень / Зима / Все сезоны.
+     - Icon = иконка для магазина/инвентаря (опционально).
+     - Grown Sprite = спрайт выросшего растения (опционально).
+     - Description = описание (опционально).
+
+8.4. Повторный запуск генератора:
+     Уже существующие Plant_01..09.asset НЕ перезаписываются.
+     Если нужно обновить заглушки:
+     - либо отредактируй ассеты вручную;
+     - либо удали нужные .asset и запусти генератор снова;
+     - либо создай новые растения вручную.
+
+8.5. Ручное создание растения:
+     Project > правый клик > Create > GreenShop >
+     "Растение (PlantData)".
+     Файл создастся в выбранной папке (лучше Assets/Data/Plants).
+
+8.6. База растений:
+     Assets/Data/PlantDatabase.asset содержит массив Plants.
+     Если создаёшь растения вручную, добавь их в массив базы.
+
+8.7. Использование в коде:
+     PlantDatabase database = ...; // ссылка из инспектора
+     PlantData plant = database.GetById("Plant_01");
+     PlantData byIndex = database.GetByIndex(0);
+     IReadOnlyList<PlantData> all = database.Plants;
+
+     Свойства PlantData:
+     - PlantName
+     - GrowTime (секунды)
+     - Price
+     - Role
+     - Season
+     - Icon
+     - GrownSprite
+     - Description
+     - Id (имя ассета)
+
+8.8. ВАЖНО:
+     Id растения = имя ассета (например, "Plant_01").
+     Если переименовать ассет, Id изменится, и сохранённые PlantSaveData
+     с plantId = "Plant_01" перестанут находить растение.
+     Не переименовывай ассеты после релиза без миграции сохранений.
+
+
+================================================================================
+9. СОХРАНЕНИЯ (JSON + PLAYERPREFS)
+================================================================================
+
+9.1. Что уже работает:
+     - GameManager при старте вызывает SaveSystem.Load().
+     - SaveManager автоматически сохраняет раз в 30 секунд,
+       при сворачивании приложения и при выходе.
+     - При отсутствии сохранения создаётся новая игра со стартовыми
+       значениями из GameManager.
+
+9.2. Что сохраняется (SaveData):
+     - version — версия формата;
+     - coins — монеты;
+     - incomePerSecond — доход;
+     - totalClicks — всего кликов;
+     - totalPlayTimeSeconds — время в игре;
+     - lastSaveUtc — время последнего сохранения;
+     - plants — список PlantSaveData (id, plotIndex, isPlanted,
+       growthSeconds);
+     - unlockedZones — открытые зоны.
+
+9.3. Где лежит файл (Windows):
+     Application.persistentDataPath =
+     C:\Users\<пользователь>\AppData\LocalLow\DefaultCompany\GreenShop
+
+     Файлы:
+     - save.json        — основное сохранение;
+     - save.json.bak    — резервная копия предыдущего сохранения;
+     - PlayerPrefs      — резервная копия JSON, ключ "greenshop.save.v1".
+
+     Точный путь можно посмотреть в меню:
+     Tools > GreenShop > Сохранение > Показать путь сохранения.
+
+9.4. Кнопка ручного сохранения (опционально):
+     Создай UI > Button "Save".
+     Button > On Click:
+     - "+".
+     - Перетащи GameRoot.
+     - Выбери SaveManager > SaveNow().
+
+9.5. Полезные меню:
+     Tools > GreenShop > Сохранение >
+     - Показать путь сохранения;
+     - Открыть папку сохранений;
+     - Удалить сохранение (файл + бэкап + PlayerPrefs, с подтверждением).
+
+9.6. Сброс прогресса:
+     1) Останови Play Mode.
+     2) Меню Tools > GreenShop > Сохранение > Удалить сохранение.
+     3) Запусти Play Mode заново.
+     Либо в инспекторе GameManager выключи Load Save On Start на время теста.
+
+9.7. Если сохранение не загружается:
+     - Проверь, что Load Save On Start = ON.
+     - Проверь, что компания и продукт в Project Settings > Player
+       не менялись (от них зависит путь).
+     - Посмотри Console: SaveSystem пишет предупреждения при повреждённом JSON.
+     - Проверь, что игра сохранилась: подожди 30 секунд, нажми SaveNow()
+       или выйди из Play Mode (вызовется OnApplicationQuit).
+
+9.8. Как расширять формат сохранения:
+     1) Добавь поле в SaveData.
+     2) Увеличь SaveData.CurrentVersion.
+     3) В SaveSystem.Migrate() добавь преобразование старых данных.
+     4) Заполняй/читай поле в GameManager.CaptureSaveData()/ApplySaveData().
+
+9.9. Потоки данных растений:
+     Сейчас PlantStates — публичный список в GameManager.
+     Система грядок должна добавлять/обновлять PlantSaveData в этом списке.
+     При сохранении список копируется в SaveData.plants.
+     При загрузке список восстанавливается из SaveData.plants.
+
+
+================================================================================
+10. ПОЛНЫЙ ПОРЯДОК СБОРКИ СЦЕНЫ
+================================================================================
+
+Минимальный набор для теста кликера и сохранений:
+
+  [ ] 1. GameRoot: GameManager + IncomeTicker + SaveManager.
+  [ ] 2. EventSystem в сцене.
+  [ ] 3. Main Camera: Tag MainCamera + Physics2DRaycaster.
+  [ ] 4. GameCanvas: Canvas (Overlay) + Canvas Scaler + FloatingTextSpawner.
+  [ ] 5. Префаб FloatingText (TMP + CanvasGroup + FloatingText) назначен
+         в FloatingTextSpawner.
+  [ ] 6. HUD на Canvas: CoinsLabel, IncomeLabel, IncomeFill + CurrencyHud.
+  [ ] 7. ClickTarget: Sprite + BoxCollider2D + Clickable.
+  [ ] 8. Нажать Play и проверить клик, доход, сохранение.
+
+Для навигации:
+
+  [ ] 9.  Вариант А: Zone_Farm/Zone_Shop/Zone_Garden + ZoneCameraController
+          + 3 кнопки с GoToZone(0/1/2).
+      ИЛИ
+      Вариант Б: 3 сцены в Build Settings + SceneLoader в первой сцене
+          + кнопки LoadScene("Farm"/"Shop"/"Garden") + EventSystem
+          в каждой сцене.
+
+Для растений:
+
+  [ ] 10. Tools > GreenShop > Растения > Создать 9 растений.
+  [ ] 11. Заменить заглушки данными из таблицы ГД.
+  [ ] 12. Проверить PlantDatabase (9 элементов).
+
+
+================================================================================
+11. ПРОВЕРКА РАБОТЫ
+================================================================================
+
+11.1. Кликер:
+      - Запусти Play Mode.
+      - Кликни по объекту 3 раза.
+      - Монеты должны увеличиться на 3.
+      - Над объектом трижды появляется "+1".
+      - Объект слегка "пружинит".
+
+11.2. Доход:
+      - При Starting Income Per Second = 1 монеты растут на 1 каждую секунду.
+      - Полоска IncomeFill заполняется за секунду.
+      - При Income = 0 полоска не двигается, начислений нет.
+
+11.3. Сохранение:
+      - Нажми SaveNow() (если сделал кнопку) или подожди 30 секунд.
+      - Останови Play Mode и запусти снова.
+      - Монеты и клики должны восстановиться.
+      - Проверь файл через меню "Открыть папку сохранений".
+
+11.4. Зоны:
+      - Кнопки переключают камеру с плавной анимацией.
+      - В Console нет ошибок о некорректной зоне.
+
+11.5. Сцены:
+      - Кнопка вызывает затемнение, загрузку и появление новой сцены.
+      - После перехода GameRoot остаётся (если был DontDestroyOnLoad).
+
+11.6. Растения:
+      - В Assets/Data/Plants ровно 9 ассетов.
+      - В PlantDatabase массив Plants содержит 9 ссылок.
+      - У каждого растения заполнены Name, GrowTime, Price, Role, Season.
+
+
+================================================================================
+12. ЧАСТЫЕ ПРОБЛЕМЫ И РЕШЕНИЯ
+================================================================================
+
+12.1. Клик не засчитывается.
+     - Нет EventSystem в сцене.
+     - На Main Camera нет Physics2DRaycaster.
+     - У объекта нет Collider2D.
+     - Collider2D стоит как Is Trigger, а Physics 2D > Queries Hit Triggers
+       выключен.
+     - Объект перекрыт UI-элементом с Raycast Target.
+     - EventSystem использует StandaloneInputModule при выключенном
+       старом Input Manager. Замени на InputSystemUIInputModule.
+
+12.2. Ошибка "В сцене нет GameManager — клик не засчитан".
+     - Нет объекта GameRoot с компонентом GameManager.
+     - GameRoot выключен (disabled) или удалён.
+     - Скрипт GameManager не скомпилировался (смотри Console).
+
+12.3. Всплывающий текст не появляется.
+     - На Canvas нет FloatingTextSpawner.
+     - В поле Prefab у спавнера пусто.
+     - Префаб FloatingText не содержит TMP_Text или CanvasGroup.
+     - Canvas не Overlay и не назначена камера.
+     - Не импортированы TMP Essentials (текст розовый/невидимый).
+     - Max Alive слишком мал? (старые удаляются, новые должны появляться).
+
+12.4. Доход не начисляется.
+     - Нет IncomeTicker на GameRoot.
+     - IncomePerSecond = 0.
+     - Auto Pay = OFF.
+     - Time.timeScale = 0, а Use Unscaled Time = OFF.
+     - GameManager отсутствует.
+
+12.5. HUD не обновляется.
+     - Не назначены Coins Label / Income Label.
+     - CurrencyHud добавлен на объект, который выключен.
+     - HUD создан до GameRoot? Нет: CurrencyHud подписывается в Start,
+       GameManager создаётся в Awake, порядок корректен.
+     - Проверь Console на предупреждение "GameManager не найден".
+
+12.6. Камера не двигается между зонами.
+     - Массив Zones пуст или View Point = None.
+     - Target Camera = None и Camera.main не находится
+       (нет камеры с тегом MainCamera).
+     - На камере есть другой скрипт, перезаписывающий Transform.
+     - Точки зон совпадают с текущей позицией.
+     - Move Duration = 0 (минимум 0.01).
+
+12.7. Ошибка SceneLoader: сцена не добавлена в Build Settings.
+     - File > Build Settings > Scenes In Build.
+     - Имя сцены в LoadScene должно точно совпадать с именем файла.
+     - Для LoadScene(int) проверь индекс в списке.
+
+12.8. После перехода сцена чёрная.
+     - Затемнение не успело открыться: проверь, что SceneLoader
+       не уничтожается при загрузке (он DontDestroyOnLoad).
+     - Не добавляй второй SceneLoader в новую сцену.
+     - Проверь, что в новой сцене есть камера.
+
+12.9. UI-кнопки не нажимаются после смены сцены.
+     - В новой сцене нет EventSystem. Добавь его в каждую сцену.
+     - Canvas без GraphicRaycaster (обычно добавляется автоматически).
+
+12.10. Сохранение не создаётся.
+     - Игра не проработала 30 секунд и не был вызван SaveNow/выход.
+     - Ошибка доступа к файлу — смотри Console.
+     - На некоторых платформах persistentDataPath может быть недоступен;
+       PlayerPrefs-бэкап всё равно запишется.
+
+12.11. Сохранение повреждено.
+     - SaveSystem попробует save.json.bak, затем PlayerPrefs.
+     - В Console будет предупреждение.
+     - Удали сохранение через меню и начни заново.
+
+12.12. Текст TMP розовый или квадратики.
+     - Window > TextMeshPro > Import TMP Essential Resources.
+     - Назначь Font Asset в TMP-компоненте.
+
+12.13. Ошибка ввода: "You are trying to read Input using the UnityEngine.Input class".
+     - Проект использует новый Input System. Скрипты не вызывают старый Input.
+     - Проверь EventSystem: должен быть InputSystemUIInputModule.
+     - Если добавлял сторонние скрипты со старым Input, переключи
+       Active Input Handling на "Both".
+
+12.14. Дублирование GameRoot / HUD исчезает после сцены.
+     - GameRoot и SaveManager используют DontDestroyOnLoad.
+     - При возврате в первую сцену создаётся новый экземпляр, его Awake
+       уничтожает дубликат.
+     - Не размещай HUD и другие важные объекты на том же GameObject,
+       что и GameManager/SaveManager, иначе дубликат уничтожит их вместе
+       с собой.
+
+
+================================================================================
+13. КРАТКИЙ СПРАВОЧНИК ПО API
+================================================================================
+
+GameManager (синглтон GameManager.Instance):
+  - double Coins { get; }
+  - double IncomePerSecond { get; }
+  - long TotalClicks { get; }
+  - double TotalPlayTimeSeconds { get; }
+  - List<PlantSaveData> PlantStates { get; }
+  - List<string> UnlockedZones { get; }
+  - event Action<double> CoinsChanged
+  - event Action<double> IncomeChanged
+  - event Action<long> ClickCountChanged
+  - void AddCoins(double amount)
+  - bool TrySpendCoins(double amount)
+  - void SetIncome(double perSecond)
+  - void AddIncome(double delta)
+  - void RegisterClick()
+  - void UnlockZone(string zoneName)
+  - SaveData CaptureSaveData()
+  - void ApplySaveData(SaveData data)
+  - void ResetProgress()
+
+Clickable:
+  - void Click() — публичный метод для Button.onClick.
+
+IncomeTicker:
+  - float Progress01 { get; }
+  - float SecondsUntilNextTick { get; }
+  - event Action<double> Ticked
+  - void TickNow()
+
+FloatingTextSpawner (синглтон FloatingTextSpawner.Instance):
+  - FloatingText Spawn(Vector2 screenPosition, string text)
+  - FloatingText Spawn(Vector2 screenPosition, string text, Color color)
+
+ZoneCameraController:
+  - int CurrentZoneIndex { get; }
+  - int ZoneCount { get; }
+  - string CurrentZoneName { get; }
+  - bool IsMoving { get; }
+  - event Action<int> ZoneChanged
+  - void GoToZone(int index)
+  - void GoToNextZone()
+  - void GoToPreviousZone()
+
+SceneLoader (синглтон SceneLoader.Instance):
+  - bool IsLoading { get; }
+  - event Action<string> SceneLoadStarted
+  - void LoadScene(string sceneName)
+  - void LoadScene(int buildIndex)
+  - void ReloadCurrentScene()
+
+SaveManager (синглтон SaveManager.Instance):
+  - void SaveNow()
+
+SaveSystem (статический):
+  - string SavePath { get; }
+  - string BackupPath { get; }
+  - bool HasSave { get; }
+  - void Save(SaveData data)
+  - SaveData Load()
+  - void DeleteSave()
+
+PlantData:
+  - string PlantName { get; }
+  - float GrowTime { get; }
+  - int Price { get; }
+  - PlantRole Role { get; }
+  - Season Season { get; }
+  - Sprite Icon { get; }
+  - Sprite GrownSprite { get; }
+  - string Description { get; }
+  - string Id { get; }
+
+PlantDatabase:
+  - IReadOnlyList<PlantData> Plants { get; }
+  - int Count { get; }
+  - PlantData GetById(string plantId)
+  - PlantData GetByIndex(int index)
+
+
+================================================================================
+14. РЕКОМЕНДУЕМАЯ СТРУКТУРА ПРОЕКТА
+================================================================================
+
+Assets/
+  Art/                  спрайты, анимации
+  Data/
+    Plants/             Plant_01..09.asset
+    PlantDatabase.asset
+  Prefabs/
+    FloatingText.prefab
+  Scenes/
+    MainGame.unity      (или Farm/Shop/Garden)
+  Scripts/
+    Core/               GameManager, SaveData, SaveSystem, SaveManager, NumberFormat
+    Clicker/            Clickable, FloatingText, FloatingTextSpawner
+    Economy/            IncomeTicker
+    Navigation/         ZoneCameraController, ScreenFade, SceneLoader
+    Plants/             PlantData, PlantDatabase
+    UI/                 CurrencyHud
+    Editor/             PlantAssetGenerator, GreenShopEditorMenu
+    SETUP_GUIDE_RU.txt  этот файл
+  UI/                   шрифты, спрайты UI
+
+Hierarchy (пример для варианта А):
+  GameRoot              GameManager + IncomeTicker + SaveManager
+  Main Camera           Camera + Physics2DRaycaster
+  EventSystem           EventSystem + InputSystemUIInputModule
+  GameCanvas            Canvas + CanvasScaler + GraphicRaycaster + FloatingTextSpawner
+    CoinsLabel          TMP_Text
+    IncomeLabel         TMP_Text
+    IncomeFill          Image (Filled)
+    HUD                 CurrencyHud
+    Btn_Farm            Button -> ZoneController.GoToZone(0)
+    Btn_Shop            Button -> ZoneController.GoToZone(1)
+    Btn_Garden          Button -> ZoneController.GoToZone(2)
+  ClickTarget           SpriteRenderer + BoxCollider2D + Clickable
+  ZoneController        ZoneCameraController
+  Zone_Farm             пустой Transform (точка камеры)
+  Zone_Shop             пустой Transform (точка камеры)
+  Zone_Garden           пустой Transform (точка камеры)
+
+Для варианта Б вместо ZoneController/Zone_* добавь:
+  SceneLoader           SceneLoader (только в первой сцене)
+
+
+================================================================================
+КОНЕЦ ИНСТРУКЦИИ
+================================================================================
