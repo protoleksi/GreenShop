@@ -1,0 +1,24 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 418ee658e614aca49a9c2624cb6bb185, type: 3}
+  m_Name: PlantDatabase
+  m_EditorClassIdentifier: Assembly-CSharp::GreenShop.PlantDatabase
+  plants:
+  - {fileID: 11400000, guid: 33778b37bc3852640ace9c8e6b0272c4, type: 2}
+  - {fileID: 11400000, guid: 78079831825ae414196b479622053936, type: 2}
+  - {fileID: 11400000, guid: 730394653184d2b4a97748460e84b1d4, type: 2}
+  - {fileID: 11400000, guid: bd0c54044e353a64f995a1bc9a1662e8, type: 2}
+  - {fileID: 11400000, guid: 9f4a99aa6fb547a4380e31eb920b6060, type: 2}
+  - {fileID: 11400000, guid: ba8032f67b5e0d741b7b030f41f4ddf9, type: 2}
+  - {fileID: 11400000, guid: 11f8a0b29c00a4d42922368ac63b968e, type: 2}
+  - {fileID: 11400000, guid: 5b170d96db56b7640bc59d16775f5914, type: 2}
+  - {fileID: 11400000, guid: 8126cf009f090564e86bfda0c4fa27e6, type: 2}
