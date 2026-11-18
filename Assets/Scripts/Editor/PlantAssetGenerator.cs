@@ -5,9 +5,6 @@ using UnityEngine;
 
 namespace GreenShop.EditorTools
 {
-    /// <summary>
-    /// Генератор ассетов растений на основе дизайн-документа Green Shop.
-    /// </summary>
     public static class PlantAssetGenerator
     {
         private const string PlantsFolder = "Assets/Data/Plants";
@@ -20,39 +17,42 @@ namespace GreenShop.EditorTools
             public float GrowTime;
             public int SeedPrice;
             public int SellPrice;
+            public int FertilizerCost;
             public int XpReward;
             public float NeedsWaterTime;
+            public float WaterPatienceTime;
             public Color Color;
             public Season Season;
             public string Description;
 
-            public PlantSeedDef(string fileName, string name, float growTime, int seedPrice, int sellPrice, int xpReward, float needsWaterTime, Color color, Season season, string description)
+            public PlantSeedDef(string fileName, string name, float growTime, int seedPrice, int sellPrice, int fertilizerCost, int xpReward, float needsWaterTime, float waterPatienceTime, Color color, Season season, string description)
             {
                 FileName = fileName;
                 Name = name;
                 GrowTime = growTime;
                 SeedPrice = seedPrice;
                 SellPrice = sellPrice;
+                FertilizerCost = fertilizerCost;
                 XpReward = xpReward;
                 NeedsWaterTime = needsWaterTime;
+                WaterPatienceTime = waterPatienceTime;
                 Color = color;
                 Season = season;
                 Description = description;
             }
         }
 
-        // Данные растений из Диздок(2).docx (Сезон 1: Лето и далее)
         public static readonly PlantSeedDef[] DesignDocPlants =
         {
-            new PlantSeedDef("Plant_01_Daisy", "Маргаритка", 5f, 5, 8, 1, 0f, new Color(1f, 0.95f, 0.45f), Season.Summer, "Простой и быстрорастущий цветок. Идеален для новичков (обучение). Не требует частого полива."),
-            new PlantSeedDef("Plant_02_Lavender", "Лаванда", 15f, 15, 25, 2, 5f, new Color(0.75f, 0.52f, 0.98f), Season.Summer, "Ароматная лаванда. Требует полива на 5-й секунде роста. Приносит больше прибыли и опыта."),
-            new PlantSeedDef("Plant_03_Sunflower", "Подсолнух", 30f, 45, 80, 5, 12f, new Color(0.98f, 0.80f, 0.15f), Season.Summer, "Яркий солнечный цветок. Нуждается в заботливом поливе, но окупается высокой ценой продажи."),
-            new PlantSeedDef("Plant_04_Cyclamen", "Цикламен", 60f, 120, 230, 12, 25f, new Color(0.94f, 0.38f, 0.57f), Season.Summer, "Изящный цикламен с нежными лепестками."),
-            new PlantSeedDef("Plant_05_Sansevieria", "Сансевиерия", 120f, 300, 625, 25, 50f, new Color(0.20f, 0.65f, 0.35f), Season.Autumn, "Щучий хвост: выносливое растение для стильного интерьера."),
-            new PlantSeedDef("Plant_06_Begonia", "Бегония", 180f, 500, 1140, 40, 75f, new Color(0.95f, 0.28f, 0.38f), Season.Autumn, "Пышная бегония, привлекающая состоятельных покупателей."),
-            new PlantSeedDef("Plant_07_Poinsettia", "Пуансеттия", 240f, 800, 1800, 55, 100f, new Color(0.85f, 0.12f, 0.18f), Season.Winter, "Рождественская звезда: символ уюта и праздника."),
-            new PlantSeedDef("Plant_08_Zamioculcas", "Замиокулькас", 300f, 1300, 3175, 85, 120f, new Color(0.12f, 0.45f, 0.22f), Season.Winter, "Долларовое дерево: символ богатства лавки."),
-            new PlantSeedDef("Plant_09_Snowberry", "Снежноягодник", 400f, 2000, 5200, 120, 150f, new Color(0.88f, 0.92f, 0.98f), Season.Winter, "Редкий снежноягодник с жемчужными плодами.")
+            new PlantSeedDef("Plant_01_Daisy", "Маргаритка", 5f, 5, 8, 1, 1, 0f, 0f, new Color(1f, 0.95f, 0.45f), Season.Summer, "Простой и быстрорастущий цветок. Не требует частого полива."),
+            new PlantSeedDef("Plant_02_Lavender", "Лаванда", 15f, 15, 25, 3, 2, 5f, 10f, new Color(0.75f, 0.52f, 0.98f), Season.Summer, "Ароматная лаванда. Требует полива на 5-й секунде роста."),
+            new PlantSeedDef("Plant_03_Sunflower", "Подсолнух", 45f, 45, 80, 10, 5, 15f, 20f, new Color(0.98f, 0.80f, 0.15f), Season.Summer, "Яркий солнечный цветок. Нуждается в поливе."),
+            new PlantSeedDef("Plant_04_Cyclamen", "Цикламен", 60f, 120, 230, 25, 12, 25f, 40f, new Color(0.94f, 0.38f, 0.57f), Season.Summer, "Изящный цикламен с нежными лепестками."),
+            new PlantSeedDef("Plant_05_Sansevieria", "Сансевиерия", 120f, 300, 625, 60, 25, 50f, 80f, new Color(0.20f, 0.65f, 0.35f), Season.Autumn, "Щучий хвост: выносливое растение для стильного интерьера."),
+            new PlantSeedDef("Plant_06_Begonia", "Бегония", 180f, 500, 1140, 100, 40, 75f, 90f, new Color(0.95f, 0.28f, 0.38f), Season.Autumn, "Пышная бегония, привлекающая состоятельных покупателей."),
+            new PlantSeedDef("Plant_07_Poinsettia", "Пуансеттия", 240f, 800, 1800, 160, 55, 100f, 120f, new Color(0.85f, 0.12f, 0.18f), Season.Winter, "Рождественская звезда: символ уюта и праздника."),
+            new PlantSeedDef("Plant_08_Zamioculcas", "Замиокулькас", 300f, 1300, 3175, 260, 85, 120f, 150f, new Color(0.12f, 0.45f, 0.22f), Season.Winter, "Долларовое дерево: символ богатства лавки."),
+            new PlantSeedDef("Plant_09_Snowberry", "Снежноягодник", 400f, 2000, 5200, 400, 120, 150f, 180f, new Color(0.88f, 0.92f, 0.98f), Season.Winter, "Редкий снежноягодник с жемчужными плодами.")
         };
 
         [MenuItem("Tools/GreenShop/Растения/Обновить базу растений из диздока")]
@@ -80,8 +80,10 @@ namespace GreenShop.EditorTools
                 so.FindProperty("growTime").floatValue = def.GrowTime;
                 so.FindProperty("seedPrice").intValue = def.SeedPrice;
                 so.FindProperty("sellPrice").intValue = def.SellPrice;
+                so.FindProperty("fertilizerCost").intValue = def.FertilizerCost;
                 so.FindProperty("xpReward").intValue = def.XpReward;
                 so.FindProperty("needsWaterTime").floatValue = def.NeedsWaterTime;
+                so.FindProperty("waterPatienceTime").floatValue = def.WaterPatienceTime;
                 so.FindProperty("plantColor").colorValue = def.Color;
                 so.FindProperty("season").enumValueIndex = (int)def.Season;
                 so.FindProperty("description").stringValue = def.Description;

@@ -23,7 +23,7 @@ namespace GreenShop
 
     /// <summary>
     /// Данные одного растения по дизайн-документу Green Shop.
-    /// Содержит время роста, стоимость семени, цену продажи и параметры полива.
+    /// Содержит время роста, стоимость семени, цену продажи, цену удобрения и параметры полива.
     /// </summary>
     [CreateAssetMenu(fileName = "Plant_New", menuName = "GreenShop/Растение (PlantData)")]
     public class PlantData : ScriptableObject
@@ -40,11 +40,17 @@ namespace GreenShop
         [Tooltip("Цена продажи готового цветка покупателю.")]
         [SerializeField, Min(0)] private int sellPrice = 8;
 
+        [Tooltip("Стоимость удобрения для данного растения.")]
+        [SerializeField, Min(0)] private int fertilizerCost = 1;
+
         [Tooltip("Опыт / репутация (XP) за продажу.")]
         [SerializeField, Min(0)] private int xpReward = 1;
 
         [Tooltip("Через сколько секунд роста требуется полив (0 = не просит воды).")]
         [SerializeField, Min(0f)] private float needsWaterTime = 0f;
+
+        [Tooltip("Время на полив до засыхания в секундах (по ТЗ: Лаванда 10с, Подсолнух 20с). Механика засыхания опциональна.")]
+        [SerializeField, Min(0f)] private float waterPatienceTime = 20f;
 
         [SerializeField] private PlantRole role = PlantRole.Flower;
         [SerializeField] private Season season = Season.Summer;
@@ -57,16 +63,18 @@ namespace GreenShop
         [TextArea(2, 4)]
         [SerializeField] private string description;
 
-        // Обратная совместимость со старыми полями
+        // Обратная совместимость
         [SerializeField, HideInInspector] private int price = 10;
 
         public string PlantName => plantName;
         public float GrowTime => growTime;
         public int SeedPrice => seedPrice > 0 ? seedPrice : Mathf.Max(1, price / 2);
         public int SellPrice => sellPrice > 0 ? sellPrice : price;
+        public int FertilizerCost => fertilizerCost > 0 ? fertilizerCost : 1;
         public int Price => SellPrice;
         public int XpReward => xpReward;
         public float NeedsWaterTime => needsWaterTime;
+        public float WaterPatienceTime => waterPatienceTime;
         public PlantRole Role => role;
         public Season Season => season;
         public Sprite Icon => icon;
@@ -74,7 +82,6 @@ namespace GreenShop
         public Color PlantColor => plantColor;
         public string Description => description;
 
-        /// <summary>Уникальный идентификатор — имя ассета.</summary>
         public string Id => name;
 
         private void OnValidate()
@@ -82,6 +89,7 @@ namespace GreenShop
             growTime = Mathf.Max(0.1f, growTime);
             seedPrice = Mathf.Max(0, seedPrice);
             sellPrice = Mathf.Max(0, sellPrice);
+            fertilizerCost = Mathf.Max(0, fertilizerCost);
             xpReward = Mathf.Max(0, xpReward);
 
             if (string.IsNullOrWhiteSpace(plantName))
