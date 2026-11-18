@@ -1,0 +1,27 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: bdce36fa7662ecb4caa5920d9a5daba9, type: 3}
+  m_Name: Plant_04_Cyclamen
+  m_EditorClassIdentifier: Assembly-CSharp::GreenShop.PlantData
+  plantName: "\u0426\u0438\u043A\u043B\u0430\u043C\u0435\u043D"
+  growTime: 60
+  seedPrice: 120
+  sellPrice: 230
+  xpReward: 12
+  needsWaterTime: 25
+  role: 1
+  season: 1
+  icon: {fileID: 0}
+  grownSprite: {fileID: 0}
+  plantColor: {r: 0.94, g: 0.38, b: 0.57, a: 1}
+  description: "\u0418\u0437\u044F\u0449\u043D\u044B\u0439 \u0446\u0438\u043A\u043B\u0430\u043C\u0435\u043D \u0441 \u043D\u0435\u0436\u043D\u044B\u043C\u0438 \u043B\u0435\u043F\u0435\u0441\u0442\u043A\u0430\u043C\u0438."
+  price: 10

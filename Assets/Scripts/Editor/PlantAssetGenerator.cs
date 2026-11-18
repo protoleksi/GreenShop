@@ -6,84 +6,88 @@ using UnityEngine;
 namespace GreenShop.EditorTools
 {
     /// <summary>
-    /// Быстрое создание 9 растений-заглушек и общей базы.
-    /// Значения ниже — заглушки. Их нужно заменить реальными данными из таблицы ГД.
+    /// Генератор ассетов растений на основе дизайн-документа Green Shop.
     /// </summary>
     public static class PlantAssetGenerator
     {
         private const string PlantsFolder = "Assets/Data/Plants";
         private const string DatabasePath = "Assets/Data/PlantDatabase.asset";
 
-        private sealed class PlantSeed
+        public sealed class PlantSeedDef
         {
-            public readonly string Name;
-            public readonly float GrowTime;
-            public readonly int Price;
-            public readonly PlantRole Role;
-            public readonly Season Season;
+            public string FileName;
+            public string Name;
+            public float GrowTime;
+            public int SeedPrice;
+            public int SellPrice;
+            public int XpReward;
+            public float NeedsWaterTime;
+            public Color Color;
+            public Season Season;
+            public string Description;
 
-            public PlantSeed(string name, float growTime, int price, PlantRole role, Season season)
+            public PlantSeedDef(string fileName, string name, float growTime, int seedPrice, int sellPrice, int xpReward, float needsWaterTime, Color color, Season season, string description)
             {
+                FileName = fileName;
                 Name = name;
                 GrowTime = growTime;
-                Price = price;
-                Role = role;
+                SeedPrice = seedPrice;
+                SellPrice = sellPrice;
+                XpReward = xpReward;
+                NeedsWaterTime = needsWaterTime;
+                Color = color;
                 Season = season;
+                Description = description;
             }
         }
 
-        // 9 растений-заглушек. GrowTime в секундах.
-        private static readonly PlantSeed[] Seeds =
+        // Данные растений из Диздок(2).docx (Сезон 1: Лето и далее)
+        public static readonly PlantSeedDef[] DesignDocPlants =
         {
-            new PlantSeed("Редис", 30f, 5, PlantRole.Crop, Season.Spring),
-            new PlantSeed("Морковь", 60f, 10, PlantRole.Crop, Season.Spring),
-            new PlantSeed("Клубника", 120f, 18, PlantRole.Crop, Season.Summer),
-            new PlantSeed("Огурец", 150f, 22, PlantRole.Crop, Season.Summer),
-            new PlantSeed("Томат", 180f, 28, PlantRole.Crop, Season.Summer),
-            new PlantSeed("Подсолнух", 240f, 35, PlantRole.Flower, Season.Summer),
-            new PlantSeed("Тыква", 300f, 45, PlantRole.Crop, Season.Autumn),
-            new PlantSeed("Яблоня", 600f, 90, PlantRole.Tree, Season.Autumn),
-            new PlantSeed("Лаванда", 420f, 70, PlantRole.Flower, Season.AllSeasons)
+            new PlantSeedDef("Plant_01_Daisy", "Маргаритка", 5f, 5, 8, 1, 0f, new Color(1f, 0.95f, 0.45f), Season.Summer, "Простой и быстрорастущий цветок. Идеален для новичков (обучение). Не требует частого полива."),
+            new PlantSeedDef("Plant_02_Lavender", "Лаванда", 15f, 15, 25, 2, 5f, new Color(0.75f, 0.52f, 0.98f), Season.Summer, "Ароматная лаванда. Требует полива на 5-й секунде роста. Приносит больше прибыли и опыта."),
+            new PlantSeedDef("Plant_03_Sunflower", "Подсолнух", 30f, 45, 80, 5, 12f, new Color(0.98f, 0.80f, 0.15f), Season.Summer, "Яркий солнечный цветок. Нуждается в заботливом поливе, но окупается высокой ценой продажи."),
+            new PlantSeedDef("Plant_04_Cyclamen", "Цикламен", 60f, 120, 230, 12, 25f, new Color(0.94f, 0.38f, 0.57f), Season.Summer, "Изящный цикламен с нежными лепестками."),
+            new PlantSeedDef("Plant_05_Sansevieria", "Сансевиерия", 120f, 300, 625, 25, 50f, new Color(0.20f, 0.65f, 0.35f), Season.Autumn, "Щучий хвост: выносливое растение для стильного интерьера."),
+            new PlantSeedDef("Plant_06_Begonia", "Бегония", 180f, 500, 1140, 40, 75f, new Color(0.95f, 0.28f, 0.38f), Season.Autumn, "Пышная бегония, привлекающая состоятельных покупателей."),
+            new PlantSeedDef("Plant_07_Poinsettia", "Пуансеттия", 240f, 800, 1800, 55, 100f, new Color(0.85f, 0.12f, 0.18f), Season.Winter, "Рождественская звезда: символ уюта и праздника."),
+            new PlantSeedDef("Plant_08_Zamioculcas", "Замиокулькас", 300f, 1300, 3175, 85, 120f, new Color(0.12f, 0.45f, 0.22f), Season.Winter, "Долларовое дерево: символ богатства лавки."),
+            new PlantSeedDef("Plant_09_Snowberry", "Снежноягодник", 400f, 2000, 5200, 120, 150f, new Color(0.88f, 0.92f, 0.98f), Season.Winter, "Редкий снежноягодник с жемчужными плодами.")
         };
 
-        [MenuItem("Tools/GreenShop/Растения/Создать 9 растений (заглушки)")]
+        [MenuItem("Tools/GreenShop/Растения/Обновить базу растений из диздока")]
         public static void GeneratePlants()
         {
             EnsureFolder("Assets/Data");
             EnsureFolder(PlantsFolder);
 
             var plants = new List<PlantData>();
-            int created = 0;
-            int skipped = 0;
 
-            for (int i = 0; i < Seeds.Length; i++)
+            for (int i = 0; i < DesignDocPlants.Length; i++)
             {
-                string path = $"{PlantsFolder}/Plant_{i + 1:00}.asset";
+                var def = DesignDocPlants[i];
+                string path = $"{PlantsFolder}/{def.FileName}.asset";
                 PlantData plant = AssetDatabase.LoadAssetAtPath<PlantData>(path);
 
                 if (plant == null)
                 {
                     plant = ScriptableObject.CreateInstance<PlantData>();
                     AssetDatabase.CreateAsset(plant, path);
-
-                    PlantSeed seed = Seeds[i];
-                    var serializedPlant = new SerializedObject(plant);
-                    serializedPlant.FindProperty("plantName").stringValue = seed.Name;
-                    serializedPlant.FindProperty("growTime").floatValue = seed.GrowTime;
-                    serializedPlant.FindProperty("price").intValue = seed.Price;
-                    serializedPlant.FindProperty("role").enumValueIndex = (int)seed.Role;
-                    serializedPlant.FindProperty("season").enumValueIndex = (int)seed.Season;
-                    serializedPlant.FindProperty("description").stringValue = "Заглушка: заменить данными из таблицы ГД.";
-                    serializedPlant.ApplyModifiedPropertiesWithoutUndo();
-
-                    EditorUtility.SetDirty(plant);
-                    created++;
-                }
-                else
-                {
-                    skipped++;
                 }
 
+                var so = new SerializedObject(plant);
+                so.FindProperty("plantName").stringValue = def.Name;
+                so.FindProperty("growTime").floatValue = def.GrowTime;
+                so.FindProperty("seedPrice").intValue = def.SeedPrice;
+                so.FindProperty("sellPrice").intValue = def.SellPrice;
+                so.FindProperty("xpReward").intValue = def.XpReward;
+                so.FindProperty("needsWaterTime").floatValue = def.NeedsWaterTime;
+                so.FindProperty("plantColor").colorValue = def.Color;
+                so.FindProperty("season").enumValueIndex = (int)def.Season;
+                so.FindProperty("description").stringValue = def.Description;
+                so.ApplyModifiedPropertiesWithoutUndo();
+
+                EditorUtility.SetDirty(plant);
                 plants.Add(plant);
             }
 
@@ -109,17 +113,7 @@ namespace GreenShop.EditorTools
             AssetDatabase.SaveAssets();
             AssetDatabase.Refresh();
 
-            Selection.activeObject = database;
-            EditorGUIUtility.PingObject(database);
-
-            Debug.Log($"[GreenShop] Растения: создано {created}, уже было {skipped}. База: {DatabasePath}");
-
-            EditorUtility.DisplayDialog(
-                "GreenShop",
-                $"Создано растений: {created} из {Seeds.Length}.\nУже существовало: {skipped}.\n\n" +
-                $"Папка: {PlantsFolder}\nБаза: {DatabasePath}\n\n" +
-                "Существующие ассеты не перезаписывались. Впиши реальные данные из таблицы ГД в инспекторе.",
-                "OK");
+            Debug.Log($"[GreenShop] Успешно создано/обновлено {plants.Count} растений из диздока в базе {DatabasePath}.");
         }
 
         private static void EnsureFolder(string path)
