@@ -1,16 +1,25 @@
 using System;
 using System.Collections;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace GreenShop
 {
     /// <summary>
     /// Навигация между зонами в одной сцене: плавно перевозит камеру к точкам обзора.
-    /// Точки — пустые GameObject'ы с нужной позицией/поворотом камеры (3 шт.).
-    /// Кнопки зон в UI вызывают GoToZone(int), GoToNextZone() или GoToPreviousZone().
+    /// Архитектура локаций (крест):
+    /// - Зона 0: Shop (Торговый зал — центральный хаб)
+    /// - Зона 1: Greenhouse (Оранжерея — находится слева от Торгового зала)
+    /// - Зона 2: Upgrades (Дерево улучшений — находится снизу от Торгового зала)
+    /// Переходы разрешены ТОЛЬКО через центральную зону Shop (0):
+    /// 0 <-> 1, 0 <-> 2. Прямые переходы 1 <-> 2 строго заблокированы.
     /// </summary>
     public class ZoneCameraController : MonoBehaviour
     {
+        public const int ZoneShop = 0;
+        public const int ZoneGreenhouse = 1;
+        public const int ZoneUpgrades = 2;
+
         [Serializable]
         public class CameraZone
         {
@@ -26,7 +35,7 @@ namespace GreenShop
 
         [Header("Зоны")]
         [SerializeField] private CameraZone[] zones = new CameraZone[0];
-        [SerializeField] private int startZoneIndex;
+        [SerializeField] private int startZoneIndex = ZoneShop;
 
         [Header("Анимация")]
         [SerializeField, Min(0.01f)] private float moveDuration = 0.8f;
@@ -35,6 +44,19 @@ namespace GreenShop
 
         [Header("Прогресс")]
         [SerializeField] private bool unlockVisitedZone = true;
+
+        [Header("UI Кнопки навигации по краям экрана")]
+        [Tooltip("Кнопка перехода в Оранжерею (левый край экрана). Активна только в Торговом зале (0).")]
+        [SerializeField] private Button buttonToGreenhouse;
+
+        [Tooltip("Кнопка перехода в Улучшения (нижний край экрана). Активна только в Торговом зале (0).")]
+        [SerializeField] private Button buttonToUpgrades;
+
+        [Tooltip("Кнопка возврата в Торговый зал из Оранжереи (правый край экрана). Активна только в Оранжерее (1).")]
+        [SerializeField] private Button buttonGreenhouseToShop;
+
+        [Tooltip("Кнопка возврата в Торговый зал из Улучшений (верхний край экрана). Активна только в Улучшениях (2).")]
+        [SerializeField] private Button buttonUpgradesToShop;
 
         private Coroutine moveRoutine;
 
@@ -46,6 +68,22 @@ namespace GreenShop
 
         public string CurrentZoneName =>
             IsValidZone(CurrentZoneIndex) ? zones[CurrentZoneIndex].name : string.Empty;
+
+        private void Awake()
+        {
+            // Автоматическая подписка на клики кнопок (если они заданы в инспекторе)
+            if (buttonToGreenhouse != null)
+                buttonToGreenhouse.onClick.AddListener(GoToGreenhouse);
+
+            if (buttonToUpgrades != null)
+                buttonToUpgrades.onClick.AddListener(GoToUpgrades);
+
+            if (buttonGreenhouseToShop != null)
+                buttonGreenhouseToShop.onClick.AddListener(GoToShop);
+
+            if (buttonUpgradesToShop != null)
+                buttonUpgradesToShop.onClick.AddListener(GoToShop);
+        }
 
         private void Start()
         {
@@ -66,7 +104,23 @@ namespace GreenShop
                 return;
             }
 
-            SnapTo(Mathf.Clamp(startZoneIndex, 0, ZoneCount - 1));
+            int initialIndex = Mathf.Clamp(startZoneIndex, 0, ZoneCount - 1);
+            SnapTo(initialIndex);
+        }
+
+        private void OnDestroy()
+        {
+            if (buttonToGreenhouse != null)
+                buttonToGreenhouse.onClick.RemoveListener(GoToGreenhouse);
+
+            if (buttonToUpgrades != null)
+                buttonToUpgrades.onClick.RemoveListener(GoToUpgrades);
+
+            if (buttonGreenhouseToShop != null)
+                buttonGreenhouseToShop.onClick.RemoveListener(GoToShop);
+
+            if (buttonUpgradesToShop != null)
+                buttonUpgradesToShop.onClick.RemoveListener(GoToShop);
         }
 
         private void OnValidate()
@@ -74,9 +128,49 @@ namespace GreenShop
             moveDuration = Mathf.Max(0.01f, moveDuration);
         }
 
+        /// <summary>Перейти в центральный Торговый зал (0).</summary>
+        public void GoToShop() => GoToZone(ZoneShop);
+
+        /// <summary>Перейти в Оранжерею (1, слева от магазина).</summary>
+        public void GoToGreenhouse() => GoToZone(ZoneGreenhouse);
+
+        /// <summary>Перейти в Дерево улучшений (2, снизу от магазина).</summary>
+        public void GoToUpgrades() => GoToZone(ZoneUpgrades);
+
+        /// <summary>
+        /// Проверка допустимости перехода между зонами по схеме «крест».
+        /// Все перемещения осуществляются строго через центральный хаб — Shop (0).
+        /// </summary>
+        public bool CanTransition(int from, int to)
+        {
+            if (from == to)
+                return false;
+
+            if (!IsValidZone(from) || !IsValidZone(to))
+                return false;
+
+            // Из центрального Shop (0) разрешён переход в Greenhouse (1) и Upgrades (2)
+            if (from == ZoneShop && (to == ZoneGreenhouse || to == ZoneUpgrades))
+                return true;
+
+            // Из Greenhouse (1) и Upgrades (2) разрешён переход ТОЛЬКО обратно в Shop (0)
+            if ((from == ZoneGreenhouse || from == ZoneUpgrades) && to == ZoneShop)
+                return true;
+
+            // Все прочие переходы (включая прямой 1 <-> 2) запрещены
+            return false;
+        }
+
         /// <summary>Плавно переехать к зоне по индексу.</summary>
         public void GoToZone(int index)
         {
+            // Защита от спама кликов: пока камера движется, новые команды игнорируются
+            if (IsMoving)
+            {
+                Debug.LogWarning("[ZoneCameraController] Переход заблокирован: камера уже находится в движении.");
+                return;
+            }
+
             if (!IsValidZone(index))
             {
                 Debug.LogWarning($"[ZoneCameraController] Некорректная зона: {index}.");
@@ -93,10 +187,18 @@ namespace GreenShop
                 return;
             }
 
-            if (index == CurrentZoneIndex && !IsMoving)
+            if (index == CurrentZoneIndex)
             {
                 Unlock(index);
                 ZoneChanged?.Invoke(index);
+                UpdateButtonVisibility(index);
+                return;
+            }
+
+            // Защита от недопустимых переходов (например, Оранжерея <-> Улучшения напрямую)
+            if (CurrentZoneIndex >= 0 && !CanTransition(CurrentZoneIndex, index))
+            {
+                Debug.LogWarning($"[ZoneCameraController] Прямой переход из зоны {CurrentZoneIndex} ({CurrentZoneName}) в зону {index} запрещён! Переход возможен только через центральный Shop ({ZoneShop}).");
                 return;
             }
 
@@ -110,27 +212,46 @@ namespace GreenShop
 
         public void GoToNextZone()
         {
-            if (ZoneCount == 0)
+            if (ZoneCount == 0 || IsMoving)
             {
                 return;
             }
 
-            GoToZone((CurrentZoneIndex + 1) % ZoneCount);
+            int next = (CurrentZoneIndex + 1) % ZoneCount;
+            if (CanTransition(CurrentZoneIndex, next))
+            {
+                GoToZone(next);
+            }
+            else
+            {
+                Debug.LogWarning($"[ZoneCameraController] GoToNextZone: переход в зону {next} запрещён из текущей зоны {CurrentZoneIndex}.");
+            }
         }
 
         public void GoToPreviousZone()
         {
-            if (ZoneCount == 0)
+            if (ZoneCount == 0 || IsMoving)
             {
                 return;
             }
 
-            GoToZone((CurrentZoneIndex - 1 + ZoneCount) % ZoneCount);
+            int prev = (CurrentZoneIndex - 1 + ZoneCount) % ZoneCount;
+            if (CanTransition(CurrentZoneIndex, prev))
+            {
+                GoToZone(prev);
+            }
+            else
+            {
+                Debug.LogWarning($"[ZoneCameraController] GoToPreviousZone: переход в зону {prev} запрещён из текущей зоны {CurrentZoneIndex}.");
+            }
         }
 
         private IEnumerator MoveToZone(int index)
         {
             IsMoving = true;
+
+            // Во время анимации скрываем кнопки навигации, чтобы исключить паразитные клики
+            UpdateButtonVisibility(-1);
 
             Transform destination = zones[index].viewPoint;
             Transform cameraTransform = targetCamera.transform;
@@ -159,6 +280,9 @@ namespace GreenShop
 
             Unlock(index);
             ZoneChanged?.Invoke(index);
+
+            // Активируем кнопки для зоны, в которую только что приехали
+            UpdateButtonVisibility(CurrentZoneIndex);
         }
 
         private void SnapTo(int index)
@@ -168,6 +292,32 @@ namespace GreenShop
             CurrentZoneIndex = index;
             Unlock(index);
             ZoneChanged?.Invoke(index);
+            UpdateButtonVisibility(CurrentZoneIndex);
+        }
+
+        /// <summary>
+        /// Обновляет видимость 4-х краевых кнопок навигации в зависимости от активной зоны.
+        /// </summary>
+        public void UpdateButtonVisibility(int zoneIndex)
+        {
+            SetButtonActive(buttonToGreenhouse, zoneIndex == ZoneShop);
+            SetButtonActive(buttonToUpgrades, zoneIndex == ZoneShop);
+            SetButtonActive(buttonGreenhouseToShop, zoneIndex == ZoneGreenhouse);
+            SetButtonActive(buttonUpgradesToShop, zoneIndex == ZoneUpgrades);
+        }
+
+        public void UpdateButtonVisibility() => UpdateButtonVisibility(CurrentZoneIndex);
+
+        /// <summary>Алиас для удобства и обратной совместимости.</summary>
+        public void UpdateNavigationButtonsVisibility(int zoneIndex) => UpdateButtonVisibility(zoneIndex);
+        public void UpdateNavigationButtonsVisibility() => UpdateButtonVisibility(CurrentZoneIndex);
+
+        private void SetButtonActive(Button button, bool active)
+        {
+            if (button != null)
+            {
+                button.gameObject.SetActive(active);
+            }
         }
 
         private bool IsValidZone(int index)
