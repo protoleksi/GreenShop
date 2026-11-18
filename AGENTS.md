@@ -66,30 +66,46 @@
 
 ---
 
-## 4. Архитектура Core-геймплея (Этап 2)
+## 4. Архитектура Core-геймплея (Этапы 1–2)
 
-### 4.1. Оранжерея (`GreenhouseController.cs`, `PlantPot.cs`)
-* `PlantPot.cs`: независимый компонент горшка со стейт-машиной (`Locked`, `Empty`, `Growing`, `NeedsWater`, `Mature`).
-  * Посадка семени списывает монеты (`GameManager.TrySpendCoins`).
-  * При `NeedsWaterTime > 0` рост встает на паузу, пока игрок не кликнет для полива (`Water()`).
-  * При `Mature` клик собирает цветок и пересылает его в `ShopInventory`.
-* `GreenhouseController.cs`: управляет 4 горшками на столе, модальным окном выбора семян, разблокировкой горшков (`UnlockPot(int)`), ускорением роста (`SetGrowthMultiplier`).
+### 4.1. Оранжерея (`GreenhouseGrid.cs`, `GridCell.cs`, `GreenhouseConfig.cs`)
+* **Конфигурация (`GreenhouseConfig`)**: хранит размер сетки (по умолчанию 5×5), количество стартово открытых клеток (2), отступы и долю среза удобрения (15%).
+* **Модель клетки (`GridCell`)**:
+  * Координаты `(X, Y)` и флаг `IsUnlocked`.
+  * Явные состояния: `Empty`, `Growing`, `NeedsWater`, `Ripe`.
+  * Валидация и применение: `CanApply(item, out reason)`, `Apply(item)`.
+  * Подсветка: `SetHighlight(Valid / Invalid / None)` (зелёная / красная рамка).
+  * Поддержка клика, наведения и дропа через `IPointerClickHandler`, `IPointerEnterHandler`, `IPointerExitHandler`, `IDropHandler`.
+* **Сетка (`GreenhouseGrid`)**:
+  * Синглтон, управляющий коллекцией клеток.
+  * Метод `GetOrthogonalNeighbors(cell)` строго возвращает 4 соседа (без диагоналей).
+  * Метод `UnlockNextCell()` открывает следующую заблокированную клетку (вызывается улучшениями).
+* **События жизненного цикла (`PlantEvents`)**:
+  * Статическая шина: `Planted`, `Watered`, `Fertilized`, `Harvested`, `Sold`.
+* **Точка расширения синергий (`ICellEffect`)**:
+  * Интерфейс с сигнатурами `OnPlanted(cell, neighbors)` и `OnHarvested(cell, neighbors)`.
 
-### 4.2. Торговый зал и покупатели (`ShopInventory.cs`, `CustomerManager.cs`)
-* `ShopInventory.cs`: синглтон-склад цветов на витрине. Методы: `AddFlower(PlantData)`, `HasFlower(PlantData)`, `TryConsumeFlower(PlantData)`.
-* `CustomerManager.cs`: спавнит клиентов у прилавка.
-  * Клиент заказывает случайный доступный цветок из базы.
-  * Кнопка «Продать» активна только если цветок есть на витрине `ShopInventory`.
-  * При продаже начисляются монеты в `GameManager.AddCoins()` и XP в статистику.
-  * Если игрок не успел обслужить за время шкалы терпения — клиент уходит, и через задержку подходит следующий.
+### 4.2. Механика «Предмет в руке» (`InteractionController.cs`, `ShelfItemSource.cs`)
+* **`InteractionController`**:
+  * Состояния руки: `None`, `Seed(PlantData)`, `WateringCan`, `Fertilizer`.
+  * Два режима применения на одном коде:
+    1. Клик по предмету на полке (прилипает к курсору) -> клик по клетке.
+    2. Drag-and-Drop (зажать на полке -> перетащить -> отпустить над клеткой).
+  * Отмена: ПКМ, Esc или клик в пустоту (ресурсы не списываются).
+  * Обратная связь: плавающий текст у курсора с причиной («Клетка заблокирована», «Растению не нужна вода», «Не хватает монет»).
+  * Мини-счётчик монет в Оранжерее.
+* **`ShelfItemSource`**:
+  * Физические предметы на полке справа: мешочки семян (Маргаритка со старта, Лаванда открывается в Дереве), Лейка, Удобрение.
 
-### 4.3. Дерево улучшений (`UpgradeManager.cs`)
-* `UpgradeManager.cs`: управляет карточками улучшений за монеты.
-  * `pot_2` — открывает горшок #2.
-  * `pot_3` — открывает горшок #3.
-  * `seed_lavender` — разблокирует Лаванду для посадки и заказов покупателей.
-  * `fertilizer_boost` — ускоряет рост на +25%.
-  * `fast_customers` — сокращает интервал между покупателями в 2 раза.
+### 4.3. Торговый зал и витрина (`ShopInventory.cs`, `CustomerManager.cs`)
+* **`ShopInventory`**:
+  * Ограниченная вместимость витрины (`MaxCapacity = 6`).
+  * Методы: `CanAcceptFlower()`, `TryAddFlower(PlantData)`, `HasFlower(PlantData)`, `TryConsumeFlower(PlantData)`.
+  * Сбор урожая блокируется с сообщением, если витрина полна.
+
+### 4.4. Добавление нового контента без правки кода (Data-Driven)
+* **Новое растение**: создать ассет `PlantData` в папке `Assets/Data/Plants/` (задать название, цвет, время роста, цену семени, цену продажи, стоимость удобрения и время полива). Код не меняется.
+* **Эффект клетки**: создать класс, реализующий `ICellEffect`, и зарегистрировать в `GreenhouseGrid.Instance.RegisterEffect(effect)`.
 
 ---
 

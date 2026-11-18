@@ -112,7 +112,7 @@ namespace GreenShop
 
             if (GameManager.Instance == null || !GameManager.Instance.TrySpendCoins(item.cost))
             {
-                UpdateHint($"<color=#f87171>Недостаточно монет для покупки «{item.title}» (нужно {item.cost} 🪙)!</color>");
+                UpdateHint($"<color=#f87171>Недостаточно монет для покупки «{item.title}» (нужно {item.cost} монет)!</color>");
                 return false;
             }
 
@@ -132,24 +132,35 @@ namespace GreenShop
             switch (item.id)
             {
                 case "pot_2":
-                    GreenhouseController.Instance?.UnlockPot(1);
-                    break;
-
                 case "pot_3":
-                    GreenhouseController.Instance?.UnlockPot(2);
+                    GreenhouseGrid.Instance?.UnlockNextCell();
                     break;
 
                 case "seed_lavender":
                     if (plantDatabase != null && plantDatabase.Count > 1)
                     {
                         var lavender = plantDatabase.Plants[1];
-                        GreenhouseController.Instance?.UnlockSeed(lavender);
+                        var shelfSources = UnityEngine.Object.FindObjectsByType<ShelfItemSource>(FindObjectsSortMode.None);
+                        foreach (var src in shelfSources)
+                        {
+                            if (src.ItemType == HandItemType.Seed && src.SeedPlant == lavender)
+                            {
+                                src.Unlock();
+                            }
+                        }
                         CustomerManager.Instance?.AddPossibleOrder(lavender);
                     }
                     break;
 
                 case "fertilizer_boost":
-                    GreenhouseController.Instance?.SetGrowthMultiplier(1.25f);
+                    // В этапе 4 будет увеличение среза удобрения, пока применяем общий буст
+                    if (GreenhouseGrid.Instance != null)
+                    {
+                        foreach (var cell in GreenhouseGrid.Instance.AllCells)
+                        {
+                            cell?.SetSpeedMultiplier(1.25f);
+                        }
+                    }
                     break;
 
                 case "fast_customers":
@@ -220,7 +231,7 @@ namespace GreenShop
                 btnTextRt.offsetMax = Vector2.zero;
 
                 var btnTmp = btnTextGo.GetComponent<TextMeshProUGUI>();
-                btnTmp.text = item.isPurchased ? "Куплено ✓" : $"Купить ({item.cost} 🪙)";
+                btnTmp.text = item.isPurchased ? "Куплено ✓" : $"Купить ({item.cost} монет)";
                 btnTmp.fontSize = 16f;
                 btnTmp.fontStyle = FontStyles.Bold;
                 btnTmp.alignment = TextAlignmentOptions.Center;
@@ -247,7 +258,7 @@ namespace GreenShop
                 }
                 if (item.costLabel != null)
                 {
-                    item.costLabel.text = item.isPurchased ? "Куплено ✓" : $"Купить ({item.cost} 🪙)";
+                    item.costLabel.text = item.isPurchased ? "Куплено ✓" : $"Купить ({item.cost} монет)";
                 }
                 if (item.cardBackground != null)
                 {

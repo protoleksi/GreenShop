@@ -98,7 +98,7 @@ namespace GreenShop
                 if (serveButtonText != null)
                 {
                     serveButtonText.text = inStock
-                        ? $"Продать (+{currentOrder.SellPrice} 🪙)"
+                        ? $"Продать (+{currentOrder.SellPrice} монет)"
                         : "Нет на витрине";
                 }
 
@@ -155,7 +155,7 @@ namespace GreenShop
 
             if (orderDetailsLabel != null)
             {
-                orderDetailsLabel.text = $"«Хочу купить <b>{currentOrder.PlantName}</b>!»\nПлачу: <color=#fbbf24>{currentOrder.SellPrice} 🪙</color>  (Опыт: +{currentOrder.XpReward} XP)";
+                orderDetailsLabel.text = $"«Хочу купить <b>{currentOrder.PlantName}</b>!»\nПлачу: <color=#fbbf24>{currentOrder.SellPrice} монет</color>  (Опыт: +{currentOrder.XpReward} XP)";
             }
 
             if (orderIcon != null)
@@ -196,7 +196,7 @@ namespace GreenShop
 
             if (counterStatusLabel != null)
             {
-                counterStatusLabel.text = $"<color=#4ade80>Успешно продано! Получено +{coinsEarned} 🪙 и +{xpEarned} XP! (Всего продано: {totalServedCount})</color>";
+                counterStatusLabel.text = $"<color=#4ade80>Успешно продано! Получено +{coinsEarned} монет и +{xpEarned} XP! (Всего продано: {totalServedCount})</color>";
             }
 
             CompleteCustomer();
