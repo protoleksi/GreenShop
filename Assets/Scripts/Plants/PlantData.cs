@@ -78,6 +78,7 @@ namespace GreenShop
         public PlantRole Role => role;
         public Season Season => season;
         public Sprite Icon => icon;
+        public Sprite PlantIcon => icon;
         public Sprite GrownSprite => grownSprite;
         public Color PlantColor => plantColor;
         public string Description => description;

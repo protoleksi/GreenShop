@@ -99,10 +99,15 @@ namespace GreenShop
 
         private void Start()
         {
-            BuildUI();
+            if (upgradesContainer != null)
+            {
+                BuildUI();
+            }
             UpdateHint("Выберите улучшение для прокачки лавки. Прогресс моментально применяется к оранжерее и магазину.");
         }
 
+        public IReadOnlyList<UpgradeItem> Upgrades => upgrades;
+        public UpgradeItem GetUpgrade(string id) => upgrades.Find(u => u.id == id);
         public bool IsPurchased(string id) => purchasedSet.Contains(id);
 
         public bool TryBuyUpgrade(string id)
@@ -140,7 +145,7 @@ namespace GreenShop
                     if (plantDatabase != null && plantDatabase.Count > 1)
                     {
                         var lavender = plantDatabase.Plants[1];
-                        var shelfSources = UnityEngine.Object.FindObjectsByType<ShelfItemSource>(FindObjectsSortMode.None);
+                        var shelfSources = UnityEngine.Object.FindObjectsByType<ShelfItemSource>(FindObjectsInactive.Include);
                         foreach (var src in shelfSources)
                         {
                             if (src.ItemType == HandItemType.Seed && src.SeedPlant == lavender)
@@ -148,6 +153,7 @@ namespace GreenShop
                                 src.Unlock();
                             }
                         }
+                        SeedWheel.Instance?.UnlockPlant(lavender);
                         CustomerManager.Instance?.AddPossibleOrder(lavender);
                     }
                     break;
@@ -231,7 +237,7 @@ namespace GreenShop
                 btnTextRt.offsetMax = Vector2.zero;
 
                 var btnTmp = btnTextGo.GetComponent<TextMeshProUGUI>();
-                btnTmp.text = item.isPurchased ? "Куплено ✓" : $"Купить ({item.cost} монет)";
+                btnTmp.text = item.isPurchased ? "Куплено" : $"Купить ({item.cost} монет)";
                 btnTmp.fontSize = 16f;
                 btnTmp.fontStyle = FontStyles.Bold;
                 btnTmp.alignment = TextAlignmentOptions.Center;
@@ -258,7 +264,7 @@ namespace GreenShop
                 }
                 if (item.costLabel != null)
                 {
-                    item.costLabel.text = item.isPurchased ? "Куплено ✓" : $"Купить ({item.cost} монет)";
+                    item.costLabel.text = item.isPurchased ? "Куплено" : $"Купить ({item.cost} монет)";
                 }
                 if (item.cardBackground != null)
                 {

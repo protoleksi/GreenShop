@@ -20,6 +20,8 @@ namespace GreenShop
         public const int ZoneGreenhouse = 1;
         public const int ZoneUpgrades = 2;
 
+        public static ZoneCameraController Instance { get; private set; }
+
         [Serializable]
         public class CameraZone
         {
@@ -58,6 +60,9 @@ namespace GreenShop
         [Tooltip("Кнопка возврата в Торговый зал из Улучшений (верхний край экрана). Активна только в Улучшениях (2).")]
         [SerializeField] private Button buttonUpgradesToShop;
 
+        [Tooltip("Глобальный счётчик монет на экранном канвасе (активен только в Торговом зале, так как в Оранжерее и Улучшениях свои HUD).")]
+        [SerializeField] private GameObject screenSpaceCoins;
+
         private Coroutine moveRoutine;
 
         public event Action<int> ZoneChanged;
@@ -71,6 +76,13 @@ namespace GreenShop
 
         private void Awake()
         {
+            if (Instance != null && Instance != this)
+            {
+                Destroy(gameObject);
+                return;
+            }
+            Instance = this;
+
             // Автоматическая подписка на клики кнопок (если они заданы в инспекторе)
             if (buttonToGreenhouse != null)
                 buttonToGreenhouse.onClick.AddListener(GoToGreenhouse);
@@ -304,6 +316,10 @@ namespace GreenShop
             SetButtonActive(buttonToUpgrades, zoneIndex == ZoneShop);
             SetButtonActive(buttonGreenhouseToShop, zoneIndex == ZoneGreenhouse);
             SetButtonActive(buttonUpgradesToShop, zoneIndex == ZoneUpgrades);
+            if (screenSpaceCoins != null)
+            {
+                screenSpaceCoins.SetActive(zoneIndex == ZoneShop);
+            }
         }
 
         public void UpdateButtonVisibility() => UpdateButtonVisibility(CurrentZoneIndex);
