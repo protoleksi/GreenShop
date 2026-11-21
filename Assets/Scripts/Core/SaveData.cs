@@ -13,7 +13,7 @@ namespace GreenShop
         public const int CurrentVersion = 1;
 
         public int version = CurrentVersion;
-        public double coins;
+        public double coins = 15.0;
         public double incomePerSecond;
         public long totalClicks;
         public double totalPlayTimeSeconds;

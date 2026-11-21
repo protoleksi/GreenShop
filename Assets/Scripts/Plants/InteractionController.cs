@@ -45,6 +45,11 @@ namespace GreenShop
         [SerializeField] private TMP_Text floatingFeedbackLabel;
         [SerializeField] private Canvas parentCanvas;
 
+        [Header("Спрайты инструментов курсора")]
+        [SerializeField] private Sprite fertilizerSprite;
+        [SerializeField] private Sprite wateringCanSprite;
+        [SerializeField] private Sprite seedSprite;
+
         [Header("Мини-счётчик монет в оранжерее")]
         [SerializeField] private TMP_Text greenhouseCoinsLabel;
 
@@ -103,13 +108,17 @@ namespace GreenShop
 
             if (parentCanvas != null)
             {
+                Camera cam = parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay
+                    ? null
+                    : (parentCanvas.worldCamera != null ? parentCanvas.worldCamera : Camera.main);
+
                 RectTransformUtility.ScreenPointToLocalPointInRectangle(
                     parentCanvas.GetComponent<RectTransform>(),
                     mousePos,
-                    parentCanvas.renderMode == RenderMode.ScreenSpaceOverlay ? null : Camera.main,
+                    cam,
                     out Vector2 localPos);
 
-                cursorFollower.anchoredPosition = localPos + new Vector2(25f, -25f);
+                cursorFollower.anchoredPosition = localPos + new Vector2(20f, -20f);
             }
         }
 
@@ -315,7 +324,7 @@ namespace GreenShop
 
             if (cursorTooltip != null)
             {
-                cursorTooltip.text = canApply ? "<color=#4ade80>✓ Применить</color>" : $"<color=#f87171>{reason}</color>";
+                cursorTooltip.text = canApply ? "<color=#4ade80>Применить</color>" : $"<color=#f87171>{reason}</color>";
             }
         }
 
@@ -336,13 +345,26 @@ namespace GreenShop
                 switch (currentItem.Type)
                 {
                     case HandItemType.Seed:
-                        cursorIcon.color = currentItem.Plant != null ? currentItem.Plant.PlantColor : Color.white;
+                        if (currentItem.Plant != null && currentItem.Plant.PlantIcon != null)
+                        {
+                            cursorIcon.sprite = currentItem.Plant.PlantIcon;
+                            cursorIcon.color = Color.white;
+                        }
+                        else
+                        {
+                            if (seedSprite != null) cursorIcon.sprite = seedSprite;
+                            cursorIcon.color = currentItem.Plant != null ? currentItem.Plant.PlantColor : Color.white;
+                        }
                         break;
+
                     case HandItemType.WateringCan:
-                        cursorIcon.color = new Color(0.35f, 0.75f, 0.95f);
+                        if (wateringCanSprite != null) cursorIcon.sprite = wateringCanSprite;
+                        cursorIcon.color = Color.white;
                         break;
+
                     case HandItemType.Fertilizer:
-                        cursorIcon.color = new Color(0.95f, 0.75f, 0.25f);
+                        if (fertilizerSprite != null) cursorIcon.sprite = fertilizerSprite;
+                        cursorIcon.color = Color.white;
                         break;
                 }
             }
@@ -375,7 +397,7 @@ namespace GreenShop
         {
             if (greenhouseCoinsLabel != null && GameManager.Instance != null)
             {
-                greenhouseCoinsLabel.text = $"Баланс: <color=#fbbf24>{GameManager.Instance.Coins:N0} монет</color>";
+                greenhouseCoinsLabel.text = $"{GameManager.Instance.Coins:N0}";
             }
         }
     }

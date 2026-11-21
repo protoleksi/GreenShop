@@ -14,8 +14,8 @@ namespace GreenShop
         public static GameManager Instance { get; private set; }
 
         [Header("Стартовые значения (если сохранения нет)")]
-        [SerializeField] private double startingCoins;
-        [SerializeField] private double startingIncomePerSecond = 1.0;
+        [SerializeField] private double startingCoins = 15.0;
+        [SerializeField] private double startingIncomePerSecond = 0.0;
 
         [Header("Сохранение")]
         [SerializeField] private bool loadSaveOnStart = true;
@@ -52,12 +52,13 @@ namespace GreenShop
             }
 
             Instance = this;
+            Application.runInBackground = true;
             if (persistBetweenScenes)
             {
                 DontDestroyOnLoad(gameObject);
             }
 
-            if (loadSaveOnStart)
+            if (loadSaveOnStart && SaveSystem.HasSave)
             {
                 ApplySaveData(SaveSystem.Load());
             }

@@ -42,6 +42,11 @@ namespace GreenShop
         {
             isUnlocked = true;
             UpdateVisuals();
+            var sector = GetComponent<SeedWheelSector>();
+            if (sector != null && !sector.IsUnlocked)
+            {
+                sector.SetUnlocked(true);
+            }
         }
 
         public void UpdateVisuals()
@@ -56,20 +61,20 @@ namespace GreenShop
                 switch (itemType)
                 {
                     case HandItemType.Seed:
-                        labelText.text = seedPlant != null ? $"Семя:\n{seedPlant.PlantName}" : "Семена";
-                        if (priceBadgeText != null) priceBadgeText.text = seedPlant != null ? $"{seedPlant.SeedPrice} монет" : "";
+                        labelText.text = seedPlant != null ? seedPlant.PlantName : "Семена";
+                        if (priceBadgeText != null) priceBadgeText.text = seedPlant != null ? $"{seedPlant.SeedPrice}" : "";
                         if (iconImage != null && seedPlant != null) iconImage.color = isUnlocked ? seedPlant.PlantColor : Color.gray;
                         break;
 
                     case HandItemType.WateringCan:
-                        labelText.text = "Лейка\n(полив)";
-                        if (priceBadgeText != null) priceBadgeText.text = "Бесплатно";
+                        labelText.text = "Лейка";
+                        if (priceBadgeText != null) priceBadgeText.text = "";
                         if (iconImage != null) iconImage.color = new Color(0.35f, 0.75f, 0.95f);
                         break;
 
                     case HandItemType.Fertilizer:
-                        labelText.text = "Удобрение\n(+15%)";
-                        if (priceBadgeText != null) priceBadgeText.text = "Платное";
+                        labelText.text = "Пакет удобрений";
+                        if (priceBadgeText != null) priceBadgeText.text = "5";
                         if (iconImage != null) iconImage.color = new Color(0.95f, 0.75f, 0.25f);
                         break;
                 }

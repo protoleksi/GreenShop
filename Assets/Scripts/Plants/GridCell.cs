@@ -25,6 +25,7 @@ namespace GreenShop
     /// Модель клетки оранжереи (GridCell).
     /// Реализует CanApply(item), Apply(item), SetHighlight(highlight) и стейт-машину растения:
     /// Empty -> Growing -> NeedsWater -> Growing -> Ripe.
+    /// Под клеткой размещается полоска времени TimeBar (154x24 px).
     /// </summary>
     public class GridCell : MonoBehaviour, IPointerClickHandler, IPointerEnterHandler, IPointerExitHandler, IDropHandler
     {
@@ -37,16 +38,14 @@ namespace GreenShop
         [SerializeField] private Image cellBackground;
         [SerializeField] private Image highlightBorder;
         [SerializeField] private Image plantVisual;
-        [SerializeField] private Image progressFill;
-        [SerializeField] private GameObject progressContainer;
-        [SerializeField] private TMP_Text statusBadge;
+        [SerializeField] private TimeBar timeBar;
         [SerializeField] private GameObject lockOverlay;
 
         [Header("Цвета подсветки")]
         [SerializeField] private Color highlightValidColor = new Color(0.2f, 0.85f, 0.4f, 0.85f);
         [SerializeField] private Color highlightInvalidColor = new Color(0.95f, 0.25f, 0.25f, 0.85f);
-        [SerializeField] private Color defaultCellColor = new Color(0.13f, 0.18f, 0.26f, 0.95f);
-        [SerializeField] private Color lockedCellColor = new Color(0.08f, 0.11f, 0.16f, 0.6f);
+        [SerializeField] private Color defaultCellColor = new Color(0.12f, 0.16f, 0.22f, 0.95f);
+        [SerializeField] private Color lockedCellColor = new Color(0.06f, 0.08f, 0.12f, 0.75f);
 
         private PlantState state = PlantState.Empty;
         private PlantData currentPlant;
@@ -63,6 +62,7 @@ namespace GreenShop
         public PlantData CurrentPlant => currentPlant;
         public float GrowthProgress => growthProgress;
         public int FertilizeCount => fertilizeCount;
+        public TimeBar TimeBarComponent => timeBar;
 
         public event Action<GridCell> StateChanged;
         public event Action<GridCell> CellClicked;
@@ -96,22 +96,17 @@ namespace GreenShop
 
                 elapsedGrowthTime += Time.deltaTime;
                 growthProgress = Mathf.Clamp01(elapsedGrowthTime / totalGrowTime);
+                float remainingSec = Mathf.Max(0f, totalGrowTime - elapsedGrowthTime);
 
-                if (progressFill != null)
+                if (timeBar != null)
                 {
-                    progressFill.fillAmount = growthProgress;
+                    timeBar.SetGrowing(growthProgress, remainingSec);
                 }
 
                 if (plantVisual != null)
                 {
                     float scale = Mathf.Lerp(0.35f, 1.0f, growthProgress);
                     plantVisual.transform.localScale = new Vector3(scale, scale, 1f);
-                }
-
-                if (statusBadge != null)
-                {
-                    int pct = Mathf.RoundToInt(growthProgress * 100f);
-                    statusBadge.text = $"Растёт {pct}%";
                 }
 
                 if (growthProgress >= 1f)
@@ -148,6 +143,7 @@ namespace GreenShop
         public bool CanApply(ItemInHand item, out string reason)
         {
             reason = string.Empty;
+
             if (!isUnlocked)
             {
                 reason = "Клетка заблокирована";
@@ -366,43 +362,35 @@ namespace GreenShop
                 cellBackground.color = isUnlocked ? defaultCellColor : lockedCellColor;
             }
 
-            if (!isUnlocked)
+            if (!isUnlocked || state == PlantState.Empty)
             {
                 if (plantVisual != null) plantVisual.gameObject.SetActive(false);
-                if (progressContainer != null) progressContainer.SetActive(false);
-                if (statusBadge != null) statusBadge.text = "[X]";
+                if (timeBar != null) timeBar.SetHidden();
                 return;
-            }
-
-            bool showProgress = state == PlantState.Growing || state == PlantState.NeedsWater;
-            if (progressContainer != null)
-            {
-                progressContainer.SetActive(showProgress);
             }
 
             switch (state)
             {
-                case PlantState.Empty:
-                    if (plantVisual != null) plantVisual.gameObject.SetActive(false);
-                    if (statusBadge != null) statusBadge.text = "<color=#94a3b8>Пусто</color>";
-                    break;
-
                 case PlantState.Growing:
                     if (plantVisual != null)
                     {
                         plantVisual.gameObject.SetActive(true);
                         plantVisual.color = currentPlant != null ? currentPlant.PlantColor : Color.white;
                     }
-                    if (statusBadge != null)
+                    if (timeBar != null && currentPlant != null)
                     {
-                        int pct = Mathf.RoundToInt(growthProgress * 100f);
-                        statusBadge.text = $"Растёт {pct}%";
+                        float total = currentPlant.GrowTime / growthSpeedMultiplier;
+                        float rem = Mathf.Max(0f, total - elapsedGrowthTime);
+                        timeBar.SetGrowing(growthProgress, rem);
                     }
                     break;
 
                 case PlantState.NeedsWater:
                     if (plantVisual != null) plantVisual.gameObject.SetActive(true);
-                    if (statusBadge != null) statusBadge.text = "<color=#38bdf8>💧 Полей!</color>";
+                    if (timeBar != null)
+                    {
+                        timeBar.SetNeedsWater(growthProgress);
+                    }
                     break;
 
                 case PlantState.Ripe:
@@ -412,7 +400,10 @@ namespace GreenShop
                         plantVisual.transform.localScale = Vector3.one;
                         plantVisual.color = currentPlant != null ? currentPlant.PlantColor : Color.white;
                     }
-                    if (statusBadge != null) statusBadge.text = "<color=#4ade80>✨ Собери!</color>";
+                    if (timeBar != null)
+                    {
+                        timeBar.SetRipe();
+                    }
                     break;
             }
         }

@@ -1,0 +1,30 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 642ac18123ebd8e45ab9c4df2478839b, type: 3}
+  m_Name: TreeStyle
+  m_EditorClassIdentifier: Assembly-CSharp::GreenShop.TreeStyle
+  growthBgColor: {r: 0.243, g: 0.482, b: 0.263, a: 1}
+  neutralBgColor: {r: 0.741, g: 0.741, b: 0.741, a: 1}
+  dividingLineColor: {r: 0.33, g: 0.33, b: 0.33, a: 0.75}
+  lockedNodeBgColor: {r: 0.46, g: 0.46, b: 0.46, a: 1}
+  lockedNodeBorderColor: {r: 0.29, g: 0.29, b: 0.29, a: 1}
+  availableNodeBorderColor: {r: 0.29, g: 0.87, b: 0.5, a: 1}
+  purchasedNodeBgColor: {r: 0.22, g: 0.56, b: 0.24, a: 1}
+  connectionLineNormal: {r: 0.29, g: 0.42, b: 0.31, a: 0.95}
+  connectionLinePurchased: {r: 0.29, g: 0.87, b: 0.5, a: 1}
+  normalNodeDiameter: 85
+  rootNodeDiameter: 100
+  connectionLineWidth: 3
+  tooltipBgColor: {r: 0.15, g: 0.165, b: 0.19, a: 1}
+  tooltipBorderColor: {r: 0.38, g: 0.42, b: 0.48, a: 0.85}
+  priceAffordableColor: {r: 0.98, g: 0.82, b: 0.22, a: 1}
+  priceUnaffordableColor: {r: 0.95, g: 0.3, b: 0.3, a: 1}

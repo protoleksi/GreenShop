@@ -41,16 +41,16 @@ namespace GreenShop.EditorTools
             }
 
             // Создаём или находим 4 кнопки
-            var btnToGreenhouse = GetOrCreateNavButton(navPanel, "Btn_ToGreenhouse", "◀ Оранжерея",
+            var btnToGreenhouse = GetOrCreateNavButton(navPanel, "Btn_ToGreenhouse", "< Оранжерея",
                 new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(25f, 0f), new Vector2(170f, 55f));
 
-            var btnToUpgrades = GetOrCreateNavButton(navPanel, "Btn_ToUpgrades", "▼ Улучшения",
+            var btnToUpgrades = GetOrCreateNavButton(navPanel, "Btn_ToUpgrades", "v Улучшения",
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 25f), new Vector2(190f, 55f));
 
-            var btnGreenhouseToShop = GetOrCreateNavButton(navPanel, "Btn_GreenhouseToShop", "Магазин ▶",
+            var btnGreenhouseToShop = GetOrCreateNavButton(navPanel, "Btn_GreenhouseToShop", "Магазин >",
                 new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(1f, 0.5f), new Vector2(-25f, 0f), new Vector2(170f, 55f));
 
-            var btnUpgradesToShop = GetOrCreateNavButton(navPanel, "Btn_UpgradesToShop", "▲ Магазин",
+            var btnUpgradesToShop = GetOrCreateNavButton(navPanel, "Btn_UpgradesToShop", "^ Магазин",
                 new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0.5f, 1f), new Vector2(0f, -25f), new Vector2(190f, 55f));
 
             // Скрываем старые прототипные кнопки (Btn_Shop, Btn_Greenhouse, Btn_Upgrades), если они есть на Canvas
