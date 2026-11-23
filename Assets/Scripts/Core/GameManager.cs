@@ -53,7 +53,7 @@ namespace GreenShop
 
             Instance = this;
             Application.runInBackground = true;
-            if (persistBetweenScenes)
+            if (persistBetweenScenes && Application.isPlaying)
             {
                 DontDestroyOnLoad(gameObject);
             }

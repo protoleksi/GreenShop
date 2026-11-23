@@ -1,54 +1,64 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
-using TMPro;
 using UnityEngine;
-using UnityEngine.UI;
 
 namespace GreenShop
 {
     /// <summary>
     /// Система покупателей в Торговом зале (Зона 0).
-    /// Клиенты приходят к прилавку, заказывают цветы и покупают их за монеты и опыт (XP).
+    /// Управляет жизненным циклом одного покупателя у прилавка:
+    /// спавн у двери, подход к кассе, ожидание заказа с таймером терпения,
+    /// продажа / отказ / таймаут и уход через дверь.
+    /// Работает непрерывно вне зависимости от текущей зоны камеры.
     /// </summary>
     public class CustomerManager : MonoBehaviour
     {
         public static CustomerManager Instance { get; private set; }
 
-        [Header("База растений для заказов")]
+        [Header("Конфигурация")]
+        [SerializeField] private CustomerConfig config;
+
+        [Header("База растений и разблокированные заказы")]
         [SerializeField] private PlantDatabase plantDatabase;
-        [SerializeField] private List<PlantData> possibleOrders = new List<PlantData>();
+        [SerializeField] private List<PlantData> unlockedOrders = new List<PlantData>();
 
-        [Header("UI Прилавка и Покупателя")]
-        [SerializeField] private GameObject customerBubble;
-        [SerializeField] private TMP_Text customerNameLabel;
-        [SerializeField] private TMP_Text orderDetailsLabel;
-        [SerializeField] private Image orderIcon;
-        [SerializeField] private Image patienceFill;
-        [SerializeField] private Button serveButton;
-        [SerializeField] private TMP_Text serveButtonText;
-        [SerializeField] private TMP_Text counterStatusLabel;
-        [SerializeField] private Image customerAvatar;
+        [Header("Компоненты покупателя и прилавка")]
+        [SerializeField] private Customer customer;
+        [SerializeField] private OrderBubble orderBubble;
+        [SerializeField] private CounterButtons counterButtons;
 
-        [Header("Настройки")]
-        [SerializeField] private float customerPatienceDuration = 40f;
-        [SerializeField] private float nextCustomerDelay = 4f;
+        [Header("Точки перемещения")]
+        [SerializeField] private Transform doorPoint;
+        [SerializeField] private Transform counterPoint;
+        [SerializeField] private Transform exitPoint;
+
+        [Header("Статистика")]
+        [SerializeField] private int totalServedCount = 0;
+        [SerializeField] private int totalXp = 0;
+
+        // Палитра приятных силуэтных оттенков одежды покупателей
+        private readonly Color[] customerColors = new Color[]
+        {
+            new Color(0.35f, 0.55f, 0.75f, 1f), // Синий
+            new Color(0.80f, 0.52f, 0.42f, 1f), // Терракотовый
+            new Color(0.48f, 0.65f, 0.45f, 1f), // Шалфейный
+            new Color(0.72f, 0.55f, 0.70f, 1f), // Лавандовый
+            new Color(0.85f, 0.68f, 0.40f, 1f)  // Охристый
+        };
 
         private PlantData currentOrder;
         private float currentPatience = 0f;
         private bool isCustomerActive = false;
-        private int totalServedCount = 0;
-        private int totalXp = 0;
+        private Coroutine customerRoutine;
 
-        private readonly string[] customerNames = { "Анна", "Михаил", "София", "Артём", "Елена", "Дмитрий", "Алиса", "Иван" };
-        private readonly Color[] customerColors = {
-            new Color(0.98f, 0.75f, 0.65f),
-            new Color(0.65f, 0.85f, 0.98f),
-            new Color(0.85f, 0.70f, 0.95f),
-            new Color(0.70f, 0.95f, 0.75f)
-        };
+        public static event Action<int, int> XpChanged; // (delta, total)
 
         public int TotalServedCount => totalServedCount;
         public int TotalXp => totalXp;
+        public bool IsCustomerActive => isCustomerActive;
+        public PlantData CurrentOrder => currentOrder;
+        public CustomerConfig Config => config;
 
         private void Awake()
         {
@@ -62,127 +72,186 @@ namespace GreenShop
 
         private void Start()
         {
-            if (possibleOrders.Count == 0 && plantDatabase != null && plantDatabase.Count > 0)
+            InitializeOrders();
+
+            if (customer != null && config != null)
             {
-                possibleOrders.Add(plantDatabase.Plants[0]); // Маргаритка
-                if (plantDatabase.Count > 1) possibleOrders.Add(plantDatabase.Plants[1]); // Лаванда
+                customer.Initialize(config);
             }
 
-            if (serveButton != null)
+            if (counterButtons != null)
             {
-                serveButton.onClick.AddListener(TryServeCurrentCustomer);
+                counterButtons.SellClicked += HandleSellClicked;
+                counterButtons.RefuseClicked += HandleRefuseClicked;
             }
 
-            StartCoroutine(CustomerLoopRoutine());
+            if (ShopInventory.Instance != null)
+            {
+                ShopInventory.Instance.InventoryChanged += OnInventoryChanged;
+            }
+
+            // Запускаем непрерывный цикл покупателей
+            if (Application.isPlaying)
+            {
+                customerRoutine = StartCoroutine(CustomerLifecycleRoutine());
+            }
+        }
+
+        private void OnDestroy()
+        {
+            if (Instance == this)
+            {
+                Instance = null;
+            }
+
+            if (counterButtons != null)
+            {
+                counterButtons.SellClicked -= HandleSellClicked;
+                counterButtons.RefuseClicked -= HandleRefuseClicked;
+            }
+
+            if (ShopInventory.Instance != null)
+            {
+                ShopInventory.Instance.InventoryChanged -= OnInventoryChanged;
+            }
+
+            if (customerRoutine != null)
+            {
+                StopCoroutine(customerRoutine);
+            }
+        }
+
+        private void InitializeOrders()
+        {
+            unlockedOrders.Clear();
+            if (plantDatabase != null && plantDatabase.Count > 0)
+            {
+                // Стартово открыта только Маргаритка (первое растение)
+                unlockedOrders.Add(plantDatabase.Plants[0]);
+
+                // Проверяем, не куплена ли уже Лаванда в UpgradeManager
+                if (UpgradeManager.Instance != null && UpgradeManager.Instance.IsPurchased("seed_lavender"))
+                {
+                    if (plantDatabase.Count > 1)
+                    {
+                        unlockedOrders.Add(plantDatabase.Plants[1]);
+                    }
+                }
+            }
         }
 
         private void Update()
         {
-            if (isCustomerActive && currentOrder != null)
+            // Обработка ожидания у прилавка
+            if (isCustomerActive && customer != null && customer.IsAtCounter && currentOrder != null)
             {
+                float patienceDuration = config != null ? config.PatienceDuration : 30f;
                 currentPatience -= Time.deltaTime;
-                float progress = Mathf.Clamp01(currentPatience / customerPatienceDuration);
 
-                if (patienceFill != null)
-                {
-                    patienceFill.fillAmount = progress;
-                }
-
-                // Обновляем доступность кнопки продажи
                 bool inStock = ShopInventory.Instance != null && ShopInventory.Instance.HasFlower(currentOrder);
-                if (serveButton != null)
+
+                if (orderBubble != null)
                 {
-                    serveButton.interactable = inStock;
+                    orderBubble.UpdateProgress(currentPatience, patienceDuration, inStock);
                 }
 
-                if (serveButtonText != null)
+                if (counterButtons != null)
                 {
-                    serveButtonText.text = inStock
-                        ? $"Продать (+{currentOrder.SellPrice} монет)"
-                        : "Нет на витрине";
+                    counterButtons.UpdateState(currentOrder, inStock);
                 }
 
                 if (currentPatience <= 0f)
                 {
-                    OnCustomerTimedOut();
+                    HandleTimeout();
                 }
             }
         }
 
-        private IEnumerator CustomerLoopRoutine()
+        private IEnumerator CustomerLifecycleRoutine()
         {
-            yield return new WaitForSeconds(1.5f);
+            // Задержка перед появлением первого покупателя (по умолчанию 8с)
+            float initialDelay = config != null ? config.FirstCustomerDelay : 8f;
+            yield return new WaitForSeconds(initialDelay);
 
             while (true)
             {
-                SpawnNewCustomer();
+                SpawnAndWalkCustomer();
 
+                // Ждем, пока покупатель не обслужен или не ушел
                 while (isCustomerActive)
                 {
                     yield return null;
                 }
 
-                yield return new WaitForSeconds(nextCustomerDelay);
+                // Интервал между покупателями (пока касса свободна)
+                float interval = config != null ? config.SpawnInterval : 20f;
+                yield return new WaitForSeconds(interval);
             }
         }
 
-        private void SpawnNewCustomer()
+        private void SpawnAndWalkCustomer()
         {
-            if (possibleOrders.Count == 0) return;
+            if (unlockedOrders.Count == 0 || customer == null) return;
 
-            currentOrder = possibleOrders[Random.Range(0, possibleOrders.Count)];
-            currentPatience = customerPatienceDuration;
             isCustomerActive = true;
+            currentOrder = unlockedOrders[UnityEngine.Random.Range(0, unlockedOrders.Count)];
+            currentPatience = config != null ? config.PatienceDuration : 30f;
 
-            string customerName = customerNames[Random.Range(0, customerNames.Length)];
-            Color avatarColor = customerColors[Random.Range(0, customerColors.Length)];
+            // Выбираем цвет силуэта
+            Color col = customerColors[UnityEngine.Random.Range(0, customerColors.Length)];
+            customer.SetVisualColor(col);
 
-            if (customerAvatar != null)
+            Vector3 spawnPos = doorPoint != null ? doorPoint.position : (config != null ? config.DoorPoint : new Vector3(8.4f, -3.4f, 0f));
+            Vector3 targetPos = counterPoint != null ? counterPoint.position : (config != null ? config.CounterPoint : new Vector3(3.7f, -3.4f, 0f));
+
+            customer.WalkToCounter(spawnPos, targetPos, OnCustomerArrivedAtCounter);
+        }
+
+        private void OnCustomerArrivedAtCounter()
+        {
+            if (!isCustomerActive || currentOrder == null) return;
+
+            bool inStock = ShopInventory.Instance != null && ShopInventory.Instance.HasFlower(currentOrder);
+            float patience = config != null ? config.PatienceDuration : 30f;
+
+            if (orderBubble != null)
             {
-                customerAvatar.gameObject.SetActive(true);
-                customerAvatar.color = avatarColor;
+                orderBubble.Show(currentOrder, patience, inStock);
             }
 
-            if (customerBubble != null)
+            if (counterButtons != null)
             {
-                customerBubble.SetActive(true);
-            }
-
-            if (customerNameLabel != null)
-            {
-                customerNameLabel.text = $"Покупатель: {customerName}";
-            }
-
-            if (orderDetailsLabel != null)
-            {
-                orderDetailsLabel.text = $"«Хочу купить <b>{currentOrder.PlantName}</b>!»\nПлачу: <color=#fbbf24>{currentOrder.SellPrice} монет</color>  (Опыт: +{currentOrder.XpReward} XP)";
-            }
-
-            if (orderIcon != null)
-            {
-                orderIcon.color = currentOrder.PlantColor;
-            }
-
-            if (counterStatusLabel != null)
-            {
-                counterStatusLabel.text = $"Клиент ждёт у прилавка. Продайте цветок «{currentOrder.PlantName}».";
+                counterButtons.Show(currentOrder, inStock);
             }
         }
 
-        public void TryServeCurrentCustomer()
+        private void OnInventoryChanged()
+        {
+            if (isCustomerActive && customer != null && customer.IsAtCounter && currentOrder != null)
+            {
+                bool inStock = ShopInventory.Instance != null && ShopInventory.Instance.HasFlower(currentOrder);
+                if (orderBubble != null)
+                {
+                    float patience = config != null ? config.PatienceDuration : 30f;
+                    orderBubble.UpdateProgress(currentPatience, patience, inStock);
+                }
+                if (counterButtons != null)
+                {
+                    counterButtons.UpdateState(currentOrder, inStock);
+                }
+            }
+        }
+
+        private void HandleSellClicked()
         {
             if (!isCustomerActive || currentOrder == null) return;
 
             if (ShopInventory.Instance == null || !ShopInventory.Instance.TryConsumeFlower(currentOrder))
             {
-                if (counterStatusLabel != null)
-                {
-                    counterStatusLabel.text = $"<color=#f87171>Цветка «{currentOrder.PlantName}» нет на витрине! Вырастите его в оранжерее.</color>";
-                }
                 return;
             }
 
-            // Успешная продажа!
+            // Награда за продажу
             int coinsEarned = currentOrder.SellPrice;
             int xpEarned = currentOrder.XpReward;
 
@@ -193,51 +262,121 @@ namespace GreenShop
 
             totalServedCount++;
             totalXp += xpEarned;
+            XpChanged?.Invoke(xpEarned, totalXp);
 
-            if (counterStatusLabel != null)
-            {
-                counterStatusLabel.text = $"<color=#4ade80>Успешно продано! Получено +{coinsEarned} монет и +{xpEarned} XP! (Всего продано: {totalServedCount})</color>";
-            }
+            // Всплывающий текст над покупателем
+            Vector3 textPos = customer != null ? customer.transform.position + Vector3.up * 2f : Vector3.zero;
+            ShowFloatingReward($"+{coinsEarned} 🪙", textPos);
 
-            CompleteCustomer();
+            // Глобальное событие продажи
+            PlantEvents.TriggerSold(currentOrder, coinsEarned, xpEarned);
+
+            // Покупатель доволен и уходит
+            EndOrderAndLeave(true);
         }
 
-        private void OnCustomerTimedOut()
+        private void HandleRefuseClicked()
         {
-            if (counterStatusLabel != null)
-            {
-                counterStatusLabel.text = "<color=#94a3b8>Покупатель устал ждать и ушёл. Скоро подойдёт следующий.</color>";
-            }
-            CompleteCustomer();
+            if (!isCustomerActive) return;
+            // Покупатель уходит без штрафа
+            EndOrderAndLeave(false);
         }
 
-        private void CompleteCustomer()
+        private void HandleTimeout()
         {
-            isCustomerActive = false;
+            if (!isCustomerActive) return;
+            // Таймаут терпения: покупатель уходит недовольным
+            EndOrderAndLeave(false);
+        }
+
+        private void EndOrderAndLeave(bool happy)
+        {
+            if (orderBubble != null) orderBubble.Hide();
+            if (counterButtons != null) counterButtons.Hide();
+
             currentOrder = null;
 
-            if (customerBubble != null)
-            {
-                customerBubble.SetActive(false);
-            }
+            Vector3 exitPos = exitPoint != null ? exitPoint.position : (config != null ? config.ExitPoint : new Vector3(8.4f, -3.4f, 0f));
 
-            if (customerAvatar != null)
+            if (customer != null)
             {
-                customerAvatar.gameObject.SetActive(false);
+                customer.Leave(exitPos, happy, () =>
+                {
+                    customer.gameObject.SetActive(false);
+                    isCustomerActive = false;
+                });
+            }
+            else
+            {
+                isCustomerActive = false;
             }
         }
 
+        private void ShowFloatingReward(string text, Vector3 worldPos)
+        {
+            if (FloatingTextSpawner.Instance != null && Camera.main != null)
+            {
+                Vector2 screenPoint = Camera.main.WorldToScreenPoint(worldPos);
+                FloatingTextSpawner.Instance.Spawn(screenPoint, text, new Color(1f, 0.85f, 0.2f, 1f));
+            }
+        }
+
+        /// <summary>Добавить растение в список доступных для заказа (вызывается при покупке улучшения семян).</summary>
         public void AddPossibleOrder(PlantData plant)
         {
-            if (plant != null && !possibleOrders.Contains(plant))
+            if (plant != null && !unlockedOrders.Contains(plant))
             {
-                possibleOrders.Add(plant);
+                unlockedOrders.Add(plant);
+                Debug.Log($"[CustomerManager] Сорт «{plant.PlantName}» добавлен в список заказов покупателей.");
             }
         }
 
+        /// <summary>Улучшение «Приток покупателей» ускоряет появление в 2 раза (множитель 0.5).</summary>
+        public void ApplyFastCustomersUpgrade(float multiplier = 0.5f)
+        {
+            if (config != null)
+            {
+                config.SetSpawnIntervalMultiplier(multiplier);
+                Debug.Log($"[CustomerManager] Улучшение «Приток покупателей» применено! Новый интервал: {config.SpawnInterval} с.");
+            }
+        }
+
+        // Для обратной совместимости
         public void SetCustomerDelay(float delay)
         {
-            nextCustomerDelay = Mathf.Max(1.5f, delay);
+            if (config != null)
+            {
+                float baseInterval = config.BaseSpawnInterval;
+                if (baseInterval > 0f)
+                {
+                    config.SetSpawnIntervalMultiplier(delay / baseInterval);
+                }
+            }
+        }
+
+        public void TryServeCurrentCustomer()
+        {
+            HandleSellClicked();
+        }
+
+        public void SetTestOrder(PlantData plant)
+        {
+            isCustomerActive = true;
+            currentOrder = plant;
+            currentPatience = config != null ? config.PatienceDuration : 30f;
+        }
+
+        public void SetupReferences(CustomerConfig cfg, Customer cust, OrderBubble bubble, CounterButtons buttons,
+            Transform door, Transform counter, Transform exit, PlantDatabase db)
+        {
+            config = cfg;
+            customer = cust;
+            orderBubble = bubble;
+            counterButtons = buttons;
+            doorPoint = door;
+            counterPoint = counter;
+            exitPoint = exit;
+            plantDatabase = db;
         }
     }
 }

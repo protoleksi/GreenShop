@@ -30,7 +30,10 @@ namespace GreenShop
             }
 
             Instance = this;
-            DontDestroyOnLoad(gameObject);
+            if (Application.isPlaying)
+            {
+                DontDestroyOnLoad(gameObject);
+            }
 
             if (fade == null)
             {

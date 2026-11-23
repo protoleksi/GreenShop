@@ -14,7 +14,13 @@ namespace GreenShop.EditorTools
         [MenuItem("Tools/GreenShop/Собрать Core Loop в сцене (Этап 1-2)")]
         public static void BuildCoreGameScene()
         {
+            const string ScenePath = "Assets/Scenes/MainGame.unity";
             var scene = EditorSceneManager.GetActiveScene();
+            if (scene.path != ScenePath)
+            {
+                scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+            }
+
             var plantDb = AssetDatabase.LoadAssetAtPath<PlantDatabase>("Assets/Data/PlantDatabase.asset");
 
             if (plantDb == null)
@@ -129,6 +135,17 @@ namespace GreenShop.EditorTools
                     if (oldUpBtn != null)
                     {
                         Object.DestroyImmediate(oldUpBtn.gameObject);
+                    }
+
+                    // Сдвигаем кнопку перехода в Улучшения влево под стеллаж (-520 px), чтобы не перекрывать кота и прилавок
+                    var toUpgradesBtn = navPanel.transform.Find("Btn_ToUpgrades");
+                    if (toUpgradesBtn != null)
+                    {
+                        var rt = toUpgradesBtn.GetComponent<RectTransform>();
+                        if (rt != null)
+                        {
+                            rt.anchoredPosition = new Vector2(-520f, 25f);
+                        }
                     }
                 }
 
@@ -478,58 +495,195 @@ namespace GreenShop.EditorTools
 
         private static void BuildShopUI(Transform parent, ShopInventory inventory, CustomerManager customerManager, PlantDatabase plantDb)
         {
-            // Заголовок
-            CreateText("Header", parent, new Vector2(800, 60), new Vector2(0, 460), "ТОРГОВЫЙ ЗАЛ — ЛАВКА", 34, FontStyles.Bold, Color.white);
+            // 1. Загрузка ассетов и спрайтов
+            var shopBgSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/Торговый зал.jpg");
+            var frameRectSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/frame_rect.png");
+            var tooltipPanelSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/tooltip_panel.png");
+            var customerSilhouette = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/customer_silhouette.png");
+            var flowerPotSprite = AssetDatabase.LoadAssetAtPath<Sprite>("Assets/Art/UI/icon_flower_pot.png");
 
-            // Левая зона: Витрина / Стеллажи
-            var shelfPanel = CreateUI("ShelfPanel", parent, new Vector2(540, 560), new Vector2(-460, -20), new Color(0.11f, 0.15f, 0.22f, 0.92f));
-            CreateText("ShelfTitle", shelfPanel.transform, new Vector2(480, 40), new Vector2(0, 240), "Витрина магазина", 24, FontStyles.Bold, new Color(0.85f, 0.9f, 0.98f));
-            CreateText("ShelfDesc", shelfPanel.transform, new Vector2(480, 50), new Vector2(0, 195), "Сюда попадают выращенные цветы из оранжереи. Отсюда они продаются покупателям.", 15, FontStyles.Normal, new Color(0.65f, 0.72f, 0.85f));
+            // Загрузка или создание CustomerConfig
+            const string CustConfigPath = "Assets/Data/CustomerConfig.asset";
+            var custConfig = AssetDatabase.LoadAssetAtPath<CustomerConfig>(CustConfigPath);
+            if (custConfig == null)
+            {
+                custConfig = ScriptableObject.CreateInstance<CustomerConfig>();
+                AssetDatabase.CreateAsset(custConfig, CustConfigPath);
+                AssetDatabase.SaveAssets();
+            }
 
-            var shelfSummary = CreateText("ShelfSummary", shelfPanel.transform, new Vector2(480, 280), new Vector2(0, 20), "Витрина пуста (соберите цветы в оранжерее)", 20, FontStyles.Normal, Color.white);
+            // 2. Фон Торгового зала (1920x1080)
+            var bgGo = CreateCenteredUI("Background", parent, new Vector2(1920, 1080), Vector2.zero, Color.white, shopBgSprite);
+            bgGo.GetComponent<Image>().raycastTarget = false;
 
-            var soInv = new SerializedObject(inventory);
-            soInv.FindProperty("shelfSummaryLabel").objectReferenceValue = shelfSummary;
-            soInv.ApplyModifiedProperties();
+            // 3. Витрина на стеллаже (ShelfSlots) — 12 позиций (4 ряда x 3 колонки)
+            var shelfGo = new GameObject("ShelfSlots", typeof(RectTransform));
+            shelfGo.transform.SetParent(parent, false);
+            var shelfRt = shelfGo.GetComponent<RectTransform>();
+            shelfRt.anchorMin = new Vector2(0.5f, 0.5f);
+            shelfRt.anchorMax = new Vector2(0.5f, 0.5f);
+            shelfRt.pivot = new Vector2(0.5f, 0.5f);
+            shelfRt.sizeDelta = new Vector2(1920f, 1080f);
+            shelfRt.anchoredPosition = Vector2.zero;
 
-            // Правая зона: Прилавок и покупатель
-            var counterPanel = CreateUI("CounterPanel", parent, new Vector2(680, 560), new Vector2(360, -20), new Color(0.12f, 0.17f, 0.26f, 0.95f));
-            CreateText("CounterTitle", counterPanel.transform, new Vector2(600, 40), new Vector2(0, 240), "Прилавок обслуживания", 24, FontStyles.Bold, Color.white);
+            var shelfSlots = shelfGo.AddComponent<ShelfSlots>();
 
-            var avatarGo = CreateUI("Avatar", counterPanel.transform, new Vector2(90, 90), new Vector2(-220, 120), new Color(0.95f, 0.8f, 0.65f));
-            var avatarImg = avatarGo.GetComponent<Image>();
+            // Координаты слотов (px от левого верхнего угла):
+            // Col X: 204, 443, 672 -> canvas X (px - 960): -756, -517, -288
+            // Row Y: 367, 600, 823, 1048 -> canvas Y (540 - py): 173, -60, -283, -508
+            float[] colX = new float[] { -756f, -517f, -288f };
+            float[] rowY = new float[] {  173f,  -60f, -283f, -508f };
 
-            var bubbleGo = CreateUI("Bubble", counterPanel.transform, new Vector2(440, 140), new Vector2(80, 120), new Color(0.18f, 0.25f, 0.38f, 1f));
-            var custName = CreateText("Name", bubbleGo.transform, new Vector2(400, 25), new Vector2(0, 45), "Покупатель: Анна", 17, FontStyles.Bold, new Color(0.75f, 0.88f, 0.98f));
-            var orderText = CreateText("OrderDetails", bubbleGo.transform, new Vector2(400, 60), new Vector2(0, -5), "«Хочу купить Маргаритку!»\nПлачу: 8 монет", 17, FontStyles.Normal, Color.white);
+            Transform[] slotRoots = new Transform[12];
+            Image[] flowerImages = new Image[12];
 
-            // Шкала терпения
-            var patCont = CreateUI("PatienceContainer", bubbleGo.transform, new Vector2(380, 12), new Vector2(0, -50), new Color(0.08f, 0.1f, 0.15f));
-            var patFill = CreateUI("Fill", patCont.transform, new Vector2(380, 12), Vector2.zero, new Color(0.35f, 0.75f, 0.95f));
+            int slotIdx = 0;
+            for (int r = 0; r < 4; r++)
+            {
+                for (int c = 0; c < 3; c++)
+                {
+                    Vector2 slotPos = new Vector2(colX[c], rowY[r]);
+                    var slotRoot = new GameObject($"Slot_{r}_{c}", typeof(RectTransform));
+                    slotRoot.transform.SetParent(shelfGo.transform, false);
+                    var srt = slotRoot.GetComponent<RectTransform>();
+                    srt.anchorMin = new Vector2(0.5f, 0.5f);
+                    srt.anchorMax = new Vector2(0.5f, 0.5f);
+                    srt.pivot = new Vector2(0.5f, 0f); // основание горшка
+                    srt.sizeDelta = new Vector2(170f, 170f);
+                    srt.anchoredPosition = slotPos;
+
+                    // Цветок
+                    var flwGo = CreateCenteredUI("FlowerVisual", slotRoot.transform, new Vector2(150f, 150f), new Vector2(0f, 75f), Color.white, flowerPotSprite);
+                    var flwImg = flwGo.GetComponent<Image>();
+                    flwImg.raycastTarget = false;
+                    flwGo.SetActive(false);
+
+                    slotRoots[slotIdx] = slotRoot.transform;
+                    flowerImages[slotIdx] = flwImg;
+                    slotIdx++;
+                }
+            }
+            shelfSlots.SetupSlots(slotRoots, null, flowerImages, plantDb, flowerPotSprite);
+
+            // 4. Опорные точки перемещения покупателя (DoorPoint, CounterPoint, ExitPoint)
+            // Дверь: px (1800, 880) -> canvas (840, -340)
+            // Прилавок: px (1330, 880) -> canvas (370, -340)
+            var doorPoint = CreateEmptyPoint("DoorPoint", parent, new Vector2(840f, -340f));
+            var counterPoint = CreateEmptyPoint("CounterPoint", parent, new Vector2(370f, -340f));
+            var exitPoint = CreateEmptyPoint("ExitPoint", parent, new Vector2(840f, -340f));
+
+            // 5. Покупатель (Customer) — рендерится ДО прилавка
+            var custGo = new GameObject("Customer", typeof(RectTransform));
+            custGo.transform.SetParent(parent, false);
+            var custRt = custGo.GetComponent<RectTransform>();
+            custRt.anchorMin = new Vector2(0.5f, 0.5f);
+            custRt.anchorMax = new Vector2(0.5f, 0.5f);
+            custRt.pivot = new Vector2(0.5f, 0f); // ноги на полу
+            custRt.sizeDelta = new Vector2(180f, 420f);
+            custRt.anchoredPosition = new Vector2(840f, -340f);
+
+            var custVisual = CreateCenteredUI("Visual", custGo.transform, new Vector2(180f, 420f), new Vector2(0f, 210f), new Color(0.35f, 0.55f, 0.75f, 1f), customerSilhouette);
+            var custImg = custVisual.GetComponent<Image>();
+            custImg.raycastTarget = false;
+
+            var customerComp = custGo.AddComponent<Customer>();
+            var soCustomer = new SerializedObject(customerComp);
+            soCustomer.FindProperty("customerImage").objectReferenceValue = custImg;
+            soCustomer.FindProperty("visualRoot").objectReferenceValue = custVisual.transform;
+            soCustomer.FindProperty("config").objectReferenceValue = custConfig;
+            soCustomer.ApplyModifiedProperties();
+            custGo.SetActive(false);
+
+            // 6. Передний план / Окклюзия прилавка (CounterOcclusion)
+            // Покупатель визуально стоит за прилавком: прилавок (x >= 804, y >= 886) и касса (x 1550-1860, y 702-1002) перекрывают его ноги
+            var occlRoot = new GameObject("CounterOcclusion", typeof(RectTransform));
+            occlRoot.transform.SetParent(parent, false);
+            var occlRt = occlRoot.GetComponent<RectTransform>();
+            occlRt.anchorMin = new Vector2(0.5f, 0.5f);
+            occlRt.anchorMax = new Vector2(0.5f, 0.5f);
+            occlRt.pivot = new Vector2(0.5f, 0.5f);
+            occlRt.sizeDelta = new Vector2(1920f, 1080f);
+            occlRt.anchoredPosition = Vector2.zero;
+
+            // 6.1 Прилавок: x >= 804, y >= 886
+            // X: 804..1920 (width 1116, center px 1362 -> canvas X 402)
+            // Y: 886..1080 (height 194, center px 983 -> canvas Y -443)
+            var counterCutout = CreateCutoutMask("CounterCutout", occlRoot.transform, new Vector2(1116f, 194f), new Vector2(402f, -443f), shopBgSprite);
+
+            // 6.2 Касса: x 1550..1860, y 702..1002
+            // X: 1550..1860 (width 310, center px 1705 -> canvas X 745)
+            // Y: 702..1002 (height 300, center px 852 -> canvas Y -312)
+            var registerCutout = CreateCutoutMask("RegisterCutout", occlRoot.transform, new Vector2(310f, 300f), new Vector2(745f, -312f), shopBgSprite);
+
+            // 7. Пузырь заказа (OrderBubble) — над головой покупателя
+            // Центр px (1330, 380) -> canvas (370, 160), размер 150x130
+            var bubbleGo = CreateCenteredUI("OrderBubble", parent, new Vector2(150f, 130f), new Vector2(370f, 160f), new Color(0.12f, 0.16f, 0.24f, 0.96f), tooltipPanelSprite, Image.Type.Sliced);
+            bubbleGo.GetComponent<Image>().raycastTarget = false;
+
+            // Иконка цветка в пузыре
+            var bubbleIconGo = CreateCenteredUI("PlantIcon", bubbleGo.transform, new Vector2(58f, 58f), new Vector2(0f, 20f), Color.white, flowerPotSprite);
+            var bubbleIconImg = bubbleIconGo.GetComponent<Image>();
+            bubbleIconImg.raycastTarget = false;
+
+            // Индикатор терпения
+            var patBg = CreateCenteredUI("PatienceBg", bubbleGo.transform, new Vector2(120f, 10f), new Vector2(0f, -24f), new Color(0.08f, 0.10f, 0.15f, 0.95f), frameRectSprite, Image.Type.Sliced);
+            var patFill = CreateCenteredUI("Fill", patBg.transform, new Vector2(116f, 6f), Vector2.zero, new Color(0.29f, 0.87f, 0.50f, 1f));
             var patFillImg = patFill.GetComponent<Image>();
             patFillImg.type = Image.Type.Filled;
             patFillImg.fillMethod = Image.FillMethod.Horizontal;
             patFillImg.fillAmount = 1f;
+            patFillImg.raycastTarget = false;
 
-            // Кнопка продажи
-            var sellBtnGo = CreateUI("Btn_Sell", counterPanel.transform, new Vector2(360, 60), new Vector2(0, -80), new Color(0.15f, 0.55f, 0.30f));
+            // Пометка «нет в наличии»
+            var outOfStockText = CreateCenteredText("OutOfStock", bubbleGo.transform, new Vector2(140f, 20f), new Vector2(0f, -44f), "<color=#f87171>нет в наличии</color>", 12, FontStyles.Normal, Color.white);
+
+            var orderBubbleComp = bubbleGo.AddComponent<OrderBubble>();
+            var soBubble = new SerializedObject(orderBubbleComp);
+            soBubble.FindProperty("bubbleRoot").objectReferenceValue = bubbleGo;
+            soBubble.FindProperty("plantIcon").objectReferenceValue = bubbleIconImg;
+            soBubble.FindProperty("patienceFill").objectReferenceValue = patFillImg;
+            soBubble.FindProperty("outOfStockLabel").objectReferenceValue = outOfStockText;
+            soBubble.ApplyModifiedProperties();
+            bubbleGo.SetActive(false);
+
+            // 8. Кнопки кассы (CounterButtons) — столбик у прилавка
+            // Центр px (1290, 960) -> canvas (330, -420), две кнопки 240x56, зазор 12
+            var buttonsRoot = new GameObject("CounterButtons", typeof(RectTransform));
+            buttonsRoot.transform.SetParent(parent, false);
+            var btnRt = buttonsRoot.GetComponent<RectTransform>();
+            btnRt.anchorMin = new Vector2(0.5f, 0.5f);
+            btnRt.anchorMax = new Vector2(0.5f, 0.5f);
+            btnRt.pivot = new Vector2(0.5f, 0.5f);
+            btnRt.sizeDelta = new Vector2(240f, 124f);
+            btnRt.anchoredPosition = new Vector2(330f, -420f);
+
+            // Кнопка «Продать» (сверху, y = +34)
+            var sellBtnGo = CreateCenteredUI("Btn_Sell", buttonsRoot.transform, new Vector2(240f, 56f), new Vector2(0f, 34f), new Color(0.18f, 0.65f, 0.32f, 1f), tooltipPanelSprite, Image.Type.Sliced);
             var sellBtn = sellBtnGo.AddComponent<Button>();
-            var sellBtnText = CreateText("Text", sellBtnGo.transform, new Vector2(350, 40), Vector2.zero, "Продать (+8 монет)", 20, FontStyles.Bold, Color.white);
+            var sellBtnImg = sellBtnGo.GetComponent<Image>();
+            var sellText = CreateCenteredText("Text", sellBtnGo.transform, new Vector2(230f, 40f), Vector2.zero, "Продать (+8 🪙)", 17, FontStyles.Bold, Color.white);
 
-            // Статус прилавка
-            var counterStatus = CreateText("StatusLabel", counterPanel.transform, new Vector2(620, 60), new Vector2(0, -180), "Клиент ждёт у прилавка. Продайте цветок.", 17, FontStyles.Normal, new Color(0.7f, 0.8f, 0.95f));
+            // Кнопка «Отказать» (снизу, y = -34)
+            var refuseBtnGo = CreateCenteredUI("Btn_Refuse", buttonsRoot.transform, new Vector2(240f, 56f), new Vector2(0f, -34f), new Color(0.40f, 0.45f, 0.50f, 0.9f), tooltipPanelSprite, Image.Type.Sliced);
+            var refuseBtn = refuseBtnGo.AddComponent<Button>();
+            var refuseBtnImg = refuseBtnGo.GetComponent<Image>();
+            var refuseText = CreateCenteredText("Text", refuseBtnGo.transform, new Vector2(230f, 40f), Vector2.zero, "Отказать", 16, FontStyles.Normal, Color.white);
 
-            var soCust = new SerializedObject(customerManager);
-            soCust.FindProperty("plantDatabase").objectReferenceValue = plantDb;
-            soCust.FindProperty("customerBubble").objectReferenceValue = bubbleGo;
-            soCust.FindProperty("customerNameLabel").objectReferenceValue = custName;
-            soCust.FindProperty("orderDetailsLabel").objectReferenceValue = orderText;
-            soCust.FindProperty("patienceFill").objectReferenceValue = patFillImg;
-            soCust.FindProperty("serveButton").objectReferenceValue = sellBtn;
-            soCust.FindProperty("serveButtonText").objectReferenceValue = sellBtnText;
-            soCust.FindProperty("counterStatusLabel").objectReferenceValue = counterStatus;
-            soCust.FindProperty("customerAvatar").objectReferenceValue = avatarImg;
-            soCust.ApplyModifiedProperties();
+            var counterButtonsComp = buttonsRoot.AddComponent<CounterButtons>();
+            var soButtons = new SerializedObject(counterButtonsComp);
+            soButtons.FindProperty("buttonsRoot").objectReferenceValue = buttonsRoot;
+            soButtons.FindProperty("sellButton").objectReferenceValue = sellBtn;
+            soButtons.FindProperty("refuseButton").objectReferenceValue = refuseBtn;
+            soButtons.FindProperty("sellButtonText").objectReferenceValue = sellText;
+            soButtons.FindProperty("refuseButtonText").objectReferenceValue = refuseText;
+            soButtons.FindProperty("sellButtonBg").objectReferenceValue = sellBtnImg;
+            soButtons.FindProperty("refuseButtonBg").objectReferenceValue = refuseBtnImg;
+            soButtons.ApplyModifiedProperties();
+            buttonsRoot.SetActive(false);
+
+            // 9. Настройка CustomerManager
+            customerManager.SetupReferences(custConfig, customerComp, orderBubbleComp, counterButtonsComp,
+                doorPoint, counterPoint, exitPoint, plantDb);
         }
 
         private static void BuildUpgradesUI(Transform parent, UpgradeManager manager, PlantDatabase plantDb)
@@ -1194,6 +1348,52 @@ namespace GreenShop.EditorTools
             tmp.color = color;
             tmp.raycastTarget = false;
             return tmp;
+        }
+
+        private static GameObject CreateCutoutMask(string name, Transform parent, Vector2 size, Vector2 localPos, Sprite bgSprite)
+        {
+            var cutout = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(RectMask2D));
+            cutout.transform.SetParent(parent, false);
+            var crt = cutout.GetComponent<RectTransform>();
+            crt.anchorMin = new Vector2(0.5f, 0.5f);
+            crt.anchorMax = new Vector2(0.5f, 0.5f);
+            crt.pivot = new Vector2(0.5f, 0.5f);
+            crt.sizeDelta = size;
+            crt.anchoredPosition = localPos;
+
+            var maskImg = cutout.GetComponent<Image>();
+            maskImg.color = Color.clear;
+            maskImg.raycastTarget = false;
+
+            // Внутреннее изображение фона с обратным смещением для идеального совпадения пикселей
+            var innerGo = new GameObject("BgSlice", typeof(RectTransform), typeof(Image));
+            innerGo.transform.SetParent(cutout.transform, false);
+            var irt = innerGo.GetComponent<RectTransform>();
+            irt.anchorMin = new Vector2(0.5f, 0.5f);
+            irt.anchorMax = new Vector2(0.5f, 0.5f);
+            irt.pivot = new Vector2(0.5f, 0.5f);
+            irt.sizeDelta = new Vector2(1920f, 1080f);
+            irt.anchoredPosition = -localPos;
+
+            var innerImg = innerGo.GetComponent<Image>();
+            innerImg.sprite = bgSprite;
+            innerImg.color = Color.white;
+            innerImg.raycastTarget = false;
+
+            return cutout;
+        }
+
+        private static Transform CreateEmptyPoint(string name, Transform parent, Vector2 canvasPos)
+        {
+            var go = new GameObject(name, typeof(RectTransform));
+            go.transform.SetParent(parent, false);
+            var rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.pivot = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = Vector2.zero;
+            rt.anchoredPosition = canvasPos;
+            return go.transform;
         }
 
         private static void DestroyIfExists(string name)
