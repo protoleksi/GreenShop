@@ -170,7 +170,7 @@ namespace GreenShop
                     break;
 
                 case "fast_customers":
-                    CustomerManager.Instance?.SetCustomerDelay(2f);
+                    CustomerManager.Instance?.ApplyFastCustomersUpgrade(0.5f);
                     break;
             }
         }

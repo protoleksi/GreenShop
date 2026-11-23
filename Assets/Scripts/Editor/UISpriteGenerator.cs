@@ -32,6 +32,7 @@ namespace GreenShop.EditorTools
             CreateTooltipPointerSprite($"{OutputDir}/tooltip_pointer.png", 48, 24);
             CreateTooltipPanelSprite($"{OutputDir}/tooltip_panel.png", 32);
             CreateAvailableRingSprite($"{OutputDir}/node_ring_available.png", 256, 14);
+            CreateCustomerSilhouetteSprite($"{OutputDir}/customer_silhouette.png", 180, 420);
 
             AssetDatabase.Refresh();
 
@@ -52,6 +53,7 @@ namespace GreenShop.EditorTools
             ConfigureImporter($"{OutputDir}/tooltip_pointer.png");
             ConfigureImporter($"{OutputDir}/tooltip_panel.png", new Vector4(6, 6, 6, 6));
             ConfigureImporter($"{OutputDir}/node_ring_available.png");
+            ConfigureImporter($"{OutputDir}/customer_silhouette.png");
 
             AssetDatabase.SaveAssets();
             Debug.Log("[UISpriteGenerator] Все UI-спрайты успешно сгенерированы в Assets/Art/UI!");
@@ -558,6 +560,60 @@ namespace GreenShop.EditorTools
                     }
                 }
             }
+        }
+
+        private static void CreateCustomerSilhouetteSprite(string path, int width, int height)
+        {
+            var tex = new Texture2D(width, height, TextureFormat.RGBA32, false);
+            var clear = new Color(0, 0, 0, 0);
+            var white = Color.white;
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    tex.SetPixel(x, y, clear);
+                }
+            }
+
+            float cx = width * 0.5f;
+            float headR = width * 0.22f; // радиус ~40px
+            float headCy = height - headR - 15f;
+            float shoulderY = headCy - headR - 12f;
+
+            for (int y = 0; y < height; y++)
+            {
+                for (int x = 0; x < width; x++)
+                {
+                    float dx = x - cx;
+                    // Голова
+                    float distHead = Mathf.Sqrt(dx * dx + (y - headCy) * (y - headCy));
+                    if (distHead <= headR)
+                    {
+                        tex.SetPixel(x, y, white);
+                        continue;
+                    }
+
+                    // Туловище и пальто
+                    if (y <= shoulderY && y >= 10)
+                    {
+                        float t = (shoulderY - y) / (shoulderY - 10f);
+                        float halfWidth = Mathf.Lerp(width * 0.30f, width * 0.40f, t);
+                        if (y > shoulderY - 25f)
+                        {
+                            float st = (shoulderY - y) / 25f;
+                            halfWidth = Mathf.Lerp(headR * 0.8f, width * 0.30f, st);
+                        }
+                        if (Mathf.Abs(dx) <= halfWidth)
+                        {
+                            tex.SetPixel(x, y, white);
+                        }
+                    }
+                }
+            }
+
+            tex.Apply();
+            SaveTex(tex, path);
         }
 
         private static void SaveTex(Texture2D tex, string path)
